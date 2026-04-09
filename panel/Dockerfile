@@ -17,10 +17,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/requirements.txt
+COPY panel/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY app /app/app
+COPY panel/app /app/app
 RUN rm -rf /app/app/static/js
 COPY --from=frontend /frontend/dist /app/app/static/js
 
