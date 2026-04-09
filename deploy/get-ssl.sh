@@ -4,13 +4,16 @@ set -e
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 ENV_PATH="$ROOT_DIR/.env"
+SECRETS_ENV_PATH="$ROOT_DIR/.secrets/caddy.env"
 
-if [ ! -f "$ENV_PATH" ]; then
-  echo ".env not found. Run deploy/install.sh first."
+if [ -f "$SECRETS_ENV_PATH" ]; then
+  PANEL_DOMAIN=$(grep -E '^PANEL_DOMAIN=' "$SECRETS_ENV_PATH" | tail -n1 | cut -d= -f2-)
+elif [ -f "$ENV_PATH" ]; then
+  PANEL_DOMAIN=$(grep -E '^PANEL_DOMAIN=' "$ENV_PATH" | tail -n1 | cut -d= -f2-)
+else
+  echo "Config not found. Run deploy/install.sh first."
   exit 1
 fi
-
-PANEL_DOMAIN=$(grep -E '^PANEL_DOMAIN=' "$ENV_PATH" | tail -n1 | cut -d= -f2-)
 PANEL_DOMAIN=${PANEL_DOMAIN:-":80"}
 
 if [ "$PANEL_DOMAIN" = ":80" ] || [ -z "$PANEL_DOMAIN" ]; then

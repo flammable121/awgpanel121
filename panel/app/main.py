@@ -7,13 +7,14 @@ import os
 import re
 import time
 import json
+import secrets
 import subprocess
 import threading
 from urllib.parse import quote
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, Request, Depends, Form, HTTPException
+from fastapi import FastAPI, Request, Depends, Form, HTTPException, Header
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -202,6 +203,106 @@ def _to_bytes(value: object) -> bytes:
 
 def verify_password(candidate: str) -> bool:
     return hmac.compare_digest(_to_bytes(candidate), _to_bytes(settings.admin_pass))
+
+
+def require_api_key(
+    authorization: str | None = Header(None),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
+) -> None:
+    token = (settings.api_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=503, detail="API token is not configured")
+    candidate = ""
+    if authorization:
+        value = authorization.strip()
+        if value.lower().startswith("bearer "):
+            candidate = value[7:].strip()
+    if not candidate and x_api_key:
+        candidate = x_api_key.strip()
+    if not candidate or not hmac.compare_digest(_to_bytes(candidate), _to_bytes(token)):
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+
+_SECRETS_LOCK = threading.Lock()
+
+
+def secrets_file_path() -> str:
+    path = os.getenv("PANEL_SECRETS_PATH")
+    if path:
+        return path
+    return os.path.join(settings.data_dir, "secrets.json")
+
+
+def load_secrets_file() -> dict[str, Any]:
+    path = secrets_file_path()
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            return data
+    except (OSError, ValueError, TypeError):
+        pass
+    return {}
+
+
+def save_secrets_file(data: dict[str, Any]) -> None:
+    path = secrets_file_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def update_secrets_file(values: dict[str, Any]) -> dict[str, Any]:
+    with _SECRETS_LOCK:
+        data = load_secrets_file()
+        data.update(values)
+        save_secrets_file(data)
+    return data
+
+
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _parse_expires_value(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if raw.isdigit():
+        try:
+            return datetime.fromtimestamp(int(raw))
+        except (ValueError, OSError):
+            return None
+    raw = raw.replace("T", " ").replace("Z", "").strip()
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        pass
+    return parse_date(raw)
+
+
+def parse_expires_from_api(payload: dict[str, Any]) -> datetime | None:
+    if _parse_bool(payload.get("never_expires")):
+        return None
+    if "expires_at" in payload:
+        return _parse_expires_value(payload.get("expires_at"))
+    expires_date = str(payload.get("expires_date") or "").strip()
+    expires_time = str(payload.get("expires_time") or "").strip()
+    if not expires_date and not expires_time:
+        return None
+    return parse_expires_from_form(expires_date, expires_time, "")
 
 
 def format_bytes(value: int) -> str:
@@ -504,43 +605,7 @@ def ensure_endpoint(request: Request, interface_kv: dict[str, str]) -> str:
     return f"{host}:{port}"
 
 
-@app.get("/login")
-def login_page(request: Request):
-    return templates.TemplateResponse(request, "login.html", template_context(request))
-
-
-@app.post("/login")
-def login_action(
-    request: Request,
-    username: str = Form(""),
-    password: str = Form(""),
-):
-    if username == settings.admin_user and verify_password(password):
-        request.session["user"] = username
-        return RedirectResponse(with_base("/"), status_code=303)
-    return templates.TemplateResponse(
-        request,
-        "login.html",
-        template_context(request, error="Неверные данные"),
-    )
-
-
-@app.post("/logout")
-def logout_action(request: Request):
-    request.session.clear()
-    return RedirectResponse(with_base("/login"), status_code=303)
-
-
-@app.get("/")
-def index(request: Request):
-    require_login(request)
-    return templates.TemplateResponse(request, "index.html", template_context(request))
-
-
-@app.get("/api/peers")
-def api_peers(request: Request, db=Depends(get_db)):
-    require_login(request)
-    controller = awg()
+def build_peers_payload(db, controller: AwgController) -> dict[str, Any]:
     try:
         interface_lines, interface_kv, _ = sync_db_from_config(db, controller)
     except AwgError as exc:
@@ -584,8 +649,10 @@ def api_peers(request: Request, db=Depends(get_db)):
                 "enabled": peer.enabled,
                 "status": status,
                 "status_label": status_label(status),
+                "expires_at": peer.expires_at.isoformat() if peer.expires_at else None,
                 "expires_display": format_date(peer.expires_at) if peer.expires_at else "∞",
                 "expires_sort": int(peer.expires_at.timestamp()) if peer.expires_at else 32503680000,
+                "created_at": peer.created_at.isoformat() if peer.created_at else None,
                 "public_key": peer.public_key,
                 "has_private_key": bool(peer.private_key),
                 "traffic_display": format_bytes(total),
@@ -594,6 +661,334 @@ def api_peers(request: Request, db=Depends(get_db)):
         )
 
     return {"peers": rows, "interface": interface_kv}
+
+
+def peer_basic_row(peer: Peer) -> dict[str, Any]:
+    status = get_peer_status(peer, utc_now())
+    return {
+        "id": peer.id,
+        "name": peer.name,
+        "note": peer.note,
+        "allowed_ips": peer.allowed_ips,
+        "client_allowed_ips": peer.client_allowed_ips,
+        "client_dns": peer.client_dns,
+        "enabled": peer.enabled,
+        "status": status,
+        "status_label": status_label(status),
+        "expires_at": peer.expires_at.isoformat() if peer.expires_at else None,
+        "expires_display": format_date(peer.expires_at) if peer.expires_at else "∞",
+        "created_at": peer.created_at.isoformat() if peer.created_at else None,
+        "public_key": peer.public_key,
+        "has_private_key": bool(peer.private_key),
+    }
+
+
+@app.get("/login")
+def login_page(request: Request):
+    return templates.TemplateResponse(request, "login.html", template_context(request))
+
+
+@app.post("/login")
+def login_action(
+    request: Request,
+    username: str = Form(""),
+    password: str = Form(""),
+):
+    if username == settings.admin_user and verify_password(password):
+        request.session["user"] = username
+        return RedirectResponse(with_base("/"), status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        template_context(request, error="Неверные данные"),
+    )
+
+
+@app.post("/logout")
+def logout_action(request: Request):
+    request.session.clear()
+    return RedirectResponse(with_base("/login"), status_code=303)
+
+
+@app.get("/")
+def index(request: Request):
+    require_login(request)
+    return templates.TemplateResponse(request, "index.html", template_context(request))
+
+
+@app.get("/api/peers")
+def api_peers(request: Request, db=Depends(get_db)):
+    require_login(request)
+    controller = awg()
+    return build_peers_payload(db, controller)
+
+
+@app.get("/api/api-info")
+def api_info(request: Request):
+    require_login(request)
+    origin = f"{request.url.scheme}://{request.url.netloc}"
+    base_url = f"{origin}{_BASE_PATH}" if _BASE_PATH else origin
+    return {
+        "api_token": settings.api_token or "",
+        "base_url": base_url,
+        "base_path": _BASE_PATH,
+    }
+
+
+@app.post("/api/api-token/reset")
+def api_token_reset(request: Request):
+    require_login(request)
+    token = secrets.token_hex(24)
+    update_secrets_file({"API_TOKEN": token})
+    settings.api_token = token
+    return {"ok": True, "api_token": token}
+
+
+@app.get("/api/awg/settings")
+def api_awg_settings(request: Request):
+    require_login(request)
+    return {
+        "public_endpoint": settings.public_endpoint or "",
+        "default_client_allowed_ips": settings.default_client_allowed_ips,
+        "default_client_dns": settings.default_client_dns or "",
+    }
+
+
+@app.post("/api/awg/settings")
+async def api_awg_settings_update(request: Request):
+    require_login(request)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    updates: dict[str, str] = {}
+
+    if "public_endpoint" in payload:
+        value = str(payload.get("public_endpoint") or "").strip()
+        updates["PUBLIC_ENDPOINT"] = value
+        settings.public_endpoint = value or None
+
+    if "default_client_allowed_ips" in payload:
+        value = str(payload.get("default_client_allowed_ips") or "").strip()
+        if not value:
+            raise HTTPException(status_code=400, detail="DEFAULT_CLIENT_ALLOWED_IPS is required")
+        updates["DEFAULT_CLIENT_ALLOWED_IPS"] = value
+        settings.default_client_allowed_ips = value
+
+    if "default_client_dns" in payload:
+        value = str(payload.get("default_client_dns") or "").strip()
+        updates["DEFAULT_CLIENT_DNS"] = value
+        settings.default_client_dns = value or None
+
+    if updates:
+        update_secrets_file(updates)
+
+    return {
+        "ok": True,
+        "public_endpoint": settings.public_endpoint or "",
+        "default_client_allowed_ips": settings.default_client_allowed_ips,
+        "default_client_dns": settings.default_client_dns or "",
+    }
+
+
+@app.get("/api/v1/peers")
+def api_v1_peers(request: Request, db=Depends(get_db), _=Depends(require_api_key)):
+    controller = awg()
+    return build_peers_payload(db, controller)
+
+
+@app.get("/api/v1/peers/{peer_id}")
+def api_v1_peer(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    peer = db.query(Peer).filter_by(id=peer_id).first()
+    if not peer:
+        raise HTTPException(status_code=404)
+    return {"peer": peer_basic_row(peer)}
+
+
+@app.post("/api/v1/peers")
+async def api_v1_create_peer(request: Request, db=Depends(get_db), _=Depends(require_api_key)):
+    controller = awg()
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    interface_lines, interface_kv, peers_cfg = read_interface_config(controller)
+
+    priv = controller.genkey()
+    pub = controller.pubkey(priv)
+    psk = controller.genpsk()
+
+    used_ips: set[str] = set()
+    for peer in db.query(Peer).all():
+        for ip in extract_ips(peer.allowed_ips):
+            used_ips.add(ip.split("/")[0])
+    for peer_cfg in peers_cfg:
+        allowed_cfg = peer_cfg["kv"].get("AllowedIPs", "")
+        for ip in extract_ips(allowed_cfg):
+            used_ips.add(ip.split("/")[0])
+    address_raw = get_param(interface_kv, "Address") or "10.8.1.0/24"
+    address = address_raw.split(",")[0].strip()
+    server_ip = address.split("/")[0]
+    used_ips.add(server_ip)
+    allowed = pick_next_ip(address, used_ips)
+
+    i_chain = generate_i_chain()
+
+    name = str(payload.get("name") or "").strip()
+    client_allowed_ips = str(payload.get("client_allowed_ips") or "").strip() or settings.default_client_allowed_ips
+    client_dns = str(payload.get("client_dns") or "").strip() or settings.default_client_dns
+    note = str(payload.get("note") or "").strip() or None
+    enabled = _parse_bool(payload.get("enabled")) if "enabled" in payload else True
+    expires_at = parse_expires_from_api(payload)
+
+    peer = Peer(
+        name=name or f"peer-{pub[:6]}",
+        public_key=pub,
+        private_key=priv,
+        preshared_key=psk,
+        allowed_ips=allowed,
+        client_allowed_ips=client_allowed_ips,
+        client_dns=client_dns,
+        note=note,
+        expires_at=expires_at,
+        enabled=enabled,
+        i1=i_chain.get("i1"),
+        i2=i_chain.get("i2"),
+        i3=i_chain.get("i3"),
+        i4=i_chain.get("i4"),
+        i5=i_chain.get("i5"),
+    )
+    db.add(peer)
+    db.commit()
+
+    apply_config_from_db(db, controller, interface_lines)
+    return {"ok": True, "peer": peer_basic_row(peer)}
+
+
+@app.patch("/api/v1/peers/{peer_id}")
+async def api_v1_update_peer(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    controller = awg()
+    peer = db.query(Peer).filter_by(id=peer_id).first()
+    if not peer:
+        raise HTTPException(status_code=404)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    if "name" in payload:
+        peer.name = str(payload.get("name") or "").strip() or peer.name
+    if "note" in payload:
+        note = str(payload.get("note") or "").strip()
+        peer.note = note or None
+    if "client_allowed_ips" in payload:
+        val = str(payload.get("client_allowed_ips") or "").strip()
+        if val:
+            peer.client_allowed_ips = val
+    if "client_dns" in payload:
+        val = str(payload.get("client_dns") or "").strip()
+        peer.client_dns = val or None
+    if "enabled" in payload:
+        peer.enabled = _parse_bool(payload.get("enabled"))
+    if "expires_at" in payload or "expires_date" in payload or "expires_time" in payload or "never_expires" in payload:
+        peer.expires_at = parse_expires_from_api(payload)
+
+    db.commit()
+    interface_lines, _, _ = read_interface_config(controller)
+    apply_config_from_db(db, controller, interface_lines)
+    return {"ok": True, "peer": peer_basic_row(peer)}
+
+
+@app.post("/api/v1/peers/{peer_id}/toggle")
+def api_v1_toggle_peer(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    controller = awg()
+    peer = db.query(Peer).filter_by(id=peer_id).first()
+    if not peer:
+        raise HTTPException(status_code=404)
+    peer.enabled = not peer.enabled
+    db.commit()
+
+    interface_lines, _, _ = read_interface_config(controller)
+    apply_config_from_db(db, controller, interface_lines)
+    return {"ok": True, "peer": peer_basic_row(peer)}
+
+
+@app.delete("/api/v1/peers/{peer_id}")
+def api_v1_delete_peer(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    controller = awg()
+    peer = db.query(Peer).filter_by(id=peer_id).first()
+    if not peer:
+        raise HTTPException(status_code=404)
+    db.delete(peer)
+    db.commit()
+
+    interface_lines, _, _ = read_interface_config(controller)
+    apply_config_from_db(db, controller, interface_lines)
+    return {"ok": True}
+
+
+@app.get("/api/v1/peers/{peer_id}/config")
+def api_v1_download_config(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    controller = awg()
+    peer = db.query(Peer).filter_by(id=peer_id).first()
+    if not peer:
+        raise HTTPException(status_code=404)
+    if not peer.private_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Конфиг недоступен: приватный ключ отсутствует. Создайте новый конфиг в панели.",
+        )
+
+    interface_lines, interface_kv, _ = read_interface_config(controller)
+    server_pub = get_server_public_key(controller)
+    endpoint = ensure_endpoint(request, interface_kv)
+    config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+
+    raw_name = peer.name or peer.id
+    safe_name = _safe_filename(raw_name, peer.id)
+    filename = f"{safe_name}.conf"
+    encoded = quote(f"{raw_name}.conf")
+    return Response(
+        content=config_text,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded}",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.get("/api/v1/peers/{peer_id}/qr")
+def api_v1_qr_config(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    import qrcode
+
+    controller = awg()
+    peer = db.query(Peer).filter_by(id=peer_id).first()
+    if not peer:
+        raise HTTPException(status_code=404)
+    if not peer.private_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Конфиг недоступен: приватный ключ отсутствует. Создайте новый конфиг в панели.",
+        )
+
+    interface_lines, interface_kv, _ = read_interface_config(controller)
+    server_pub = get_server_public_key(controller)
+    endpoint = ensure_endpoint(request, interface_kv)
+    config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+
+    img = qrcode.make(config_text)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
 
 
 @app.post("/peers")

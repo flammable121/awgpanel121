@@ -2,13 +2,14 @@
 import { DashboardView } from "./components/DashboardView.js";
 import { ClientsView } from "./components/ClientsView.js";
 import { AwgInfoView } from "./components/AwgInfoView.js";
+import { ApiInfoView } from "./components/ApiInfoView.js";
 
 const basePath = (window.__PANEL_BASE__ || "").replace(/\/+$/, "");
 const logoutUrl = basePath ? `${basePath}/logout` : "/logout";
 
 const App = {
   name: "App",
-  components: { DashboardView, ClientsView, AwgInfoView },
+  components: { DashboardView, ClientsView, AwgInfoView, ApiInfoView },
   setup() {
     const tab = ref("dashboard");
     const theme = ref(localStorage.getItem("theme") || "dark");
@@ -28,7 +29,7 @@ const App = {
     };
 
     const initialTab = new URLSearchParams(window.location.search).get("tab");
-    if (["dashboard", "clients", "awg"].includes(initialTab)) {
+    if (["dashboard", "clients", "awg", "api"].includes(initialTab)) {
       tab.value = initialTab;
     }
 
@@ -78,6 +79,14 @@ const App = {
             >
               AmneziaWG 2.0
             </button>
+            <button
+              class="side-link"
+              :class="{ active: tab === 'api' }"
+              type="button"
+              @click="setTab('api'); closeNav()"
+            >
+              API
+            </button>
           </nav>
           <div class="sidebar-footer">
             <button class="side-link ghost" type="button" @click="toggleTheme">
@@ -94,7 +103,8 @@ const App = {
         <div class="content">
           <DashboardView v-if="tab === 'dashboard'" />
           <ClientsView v-else-if="tab === 'clients'" />
-          <AwgInfoView v-else />
+          <AwgInfoView v-else-if="tab === 'awg'" />
+          <ApiInfoView v-else />
         </div>
       </main>
     </div>

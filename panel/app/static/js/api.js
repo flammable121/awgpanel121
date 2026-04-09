@@ -84,6 +84,14 @@ export function fetchAwgParams() {
   return apiGet("/api/awg/params");
 }
 
+export function fetchApiInfo() {
+  return apiGet("/api/api-info");
+}
+
+export function resetApiToken() {
+  return apiPost("/api/api-token/reset");
+}
+
 export async function updateAwgParams(params) {
   const response = await fetch(withBase("/api/awg/params"), {
     method: "POST",
@@ -102,6 +110,33 @@ export async function updateAwgParams(params) {
 
 export function fetchIChain() {
   return apiGet("/api/awg/i-chain");
+}
+
+export function fetchAwgSettings() {
+  return apiGet("/api/awg/settings");
+}
+
+export async function updateAwgSettings(payload) {
+  const response = await fetch(withBase("/api/awg/settings"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "fetch",
+    },
+    body: JSON.stringify(payload || {}),
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    let detail = "Не удалось сохранить настройки";
+    try {
+      const data = await response.json();
+      if (data && data.detail) detail = data.detail;
+    } catch (err) {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+  return response.json();
 }
 
 export async function createPeer(name) {

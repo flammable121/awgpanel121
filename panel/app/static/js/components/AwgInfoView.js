@@ -1,5 +1,11 @@
 import { ref, onMounted } from "https://unpkg.com/vue@3/dist/vue.esm-browser.js";
-import { fetchAwgParams, updateAwgParams, fetchIChain } from "../api.js";
+import {
+  fetchAwgParams,
+  updateAwgParams,
+  fetchIChain,
+  fetchAwgSettings,
+  updateAwgSettings,
+} from "../api.js";
 
 export const AwgInfoView = {
   name: "AwgInfoView",
@@ -22,15 +28,33 @@ export const AwgInfoView = {
     const saving = ref(false);
     const message = ref("");
     const showAwg = ref(true);
+    const showRanges = ref(false);
+    const showDefaults = ref(true);
+
+    const settingsForm = ref({
+      public_endpoint: "",
+      default_client_allowed_ips: "0.0.0.0/0, ::/0",
+      default_client_dns: "",
+    });
+    const settingsSaving = ref(false);
+    const settingsMessage = ref("");
 
     const load = async () => {
       loading.value = true;
       message.value = "";
       try {
-        const data = await fetchAwgParams();
-        params.value = { ...params.value, ...(data.params || {}) };
+        const [paramsData, settingsData] = await Promise.all([
+          fetchAwgParams(),
+          fetchAwgSettings(),
+        ]);
+        params.value = { ...params.value, ...(paramsData.params || {}) };
+        settingsForm.value = {
+          public_endpoint: settingsData.public_endpoint || "",
+          default_client_allowed_ips: settingsData.default_client_allowed_ips || "0.0.0.0/0, ::/0",
+          default_client_dns: settingsData.default_client_dns || "",
+        };
       } catch (err) {
-        message.value = "Не удалось загрузить параметры";
+        message.value = "Не удалось загрузить настройки AmneziaWG";
       } finally {
         loading.value = false;
       }
@@ -47,6 +71,24 @@ export const AwgInfoView = {
         message.value = "Не удалось сохранить параметры";
       } finally {
         saving.value = false;
+      }
+    };
+
+    const saveDefaults = async () => {
+      settingsSaving.value = true;
+      settingsMessage.value = "";
+      try {
+        const data = await updateAwgSettings(settingsForm.value);
+        settingsForm.value = {
+          public_endpoint: data.public_endpoint || "",
+          default_client_allowed_ips: data.default_client_allowed_ips || "0.0.0.0/0, ::/0",
+          default_client_dns: data.default_client_dns || "",
+        };
+        settingsMessage.value = "Настройки клиентских конфигов сохранены";
+      } catch (err) {
+        settingsMessage.value = err && err.message ? err.message : "Не удалось сохранить настройки";
+      } finally {
+        settingsSaving.value = false;
       }
     };
 
@@ -71,6 +113,12 @@ export const AwgInfoView = {
       save,
       genChain,
       showAwg,
+      showRanges,
+      showDefaults,
+      settingsForm,
+      settingsSaving,
+      settingsMessage,
+      saveDefaults,
     };
   },
   template: `
@@ -85,8 +133,8 @@ export const AwgInfoView = {
         <div class="collapse-body" :class="{ open: showAwg }">
           <div class="collapse-inner">
             <p class="muted">
-              Параметры обфускации AmneziaWG. Обычно менять не требуется — используйте только при проблемах
-              с подключением или блокировками.
+              Параметры обфускации AmneziaWG. Обычно менять не требуется — используйте только при
+              проблемах с подключением или блокировками.
             </p>
 
             <div class="awg-grid">
@@ -123,6 +171,73 @@ export const AwgInfoView = {
                 {{ saving ? 'Сохранение...' : 'Сохранить' }}
               </button>
               <div v-if="message" class="muted">{{ message }}</div>
+            </div>
+
+            <div class="sub-collapse">
+              <button class="collapse-header small" :class="{ open: showDefaults }" @click="showDefaults = !showDefaults">
+                <span>Настройки клиентских конфигов</span>
+                <span class="collapse-chevron">v</span>
+              </button>
+              <div class="collapse-body" :class="{ open: showDefaults }">
+                <div class="collapse-inner">
+                  <div class="form">
+                    <label>
+                      <span>Public endpoint (host:port)</span>
+                      <input type="text" v-model="settingsForm.public_endpoint" placeholder="example.com:51820" />
+                    </label>
+                    <label>
+                      <span>AllowedIPs по умолчанию</span>
+                      <input type="text" v-model="settingsForm.default_client_allowed_ips" placeholder="0.0.0.0/0, ::/0" />
+                    </label>
+                    <label>
+                      <span>DNS по умолчанию</span>
+                      <input type="text" v-model="settingsForm.default_client_dns" placeholder="1.1.1.1, 8.8.8.8" />
+                    </label>
+                  </div>
+                  <div class="awg-actions">
+                    <button class="btn primary" type="button" :disabled="settingsSaving" @click="saveDefaults">
+                      {{ settingsSaving ? 'Сохранение...' : 'Сохранить настройки' }}
+                    </button>
+                    <div v-if="settingsMessage" class="muted">{{ settingsMessage }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sub-collapse">
+              <button class="collapse-header small" :class="{ open: showRanges }" @click="showRanges = !showRanges">
+                <span>Диапазоны параметров</span>
+                <span class="collapse-chevron">v</span>
+              </button>
+              <div class="collapse-body" :class="{ open: showRanges }">
+                <div class="collapse-inner">
+                  <div class="range-grid">
+                    <div class="range-item">
+                      <div class="range-name">Jc</div>
+                      <div class="range-value">1–255</div>
+                      <div class="range-note">целое число</div>
+                    </div>
+                    <div class="range-item">
+                      <div class="range-name">Jmin / Jmax</div>
+                      <div class="range-value">1–255</div>
+                      <div class="range-note">Jmin ≤ Jmax</div>
+                    </div>
+                    <div class="range-item">
+                      <div class="range-name">S1–S4</div>
+                      <div class="range-value">1–255</div>
+                      <div class="range-note">целые числа</div>
+                    </div>
+                    <div class="range-item">
+                      <div class="range-name">H1–H4</div>
+                      <div class="range-value">0–4294967295</div>
+                      <div class="range-note">диапазон min-max</div>
+                    </div>
+                  </div>
+                  <p class="muted">
+                    Рекомендуется менять параметры осторожно и сохранять базовые значения.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div class="awg-divider"></div>

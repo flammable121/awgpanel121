@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     admin_user: str = "admin"
     admin_pass: str = "change-me"
+    api_token: str = ""
     panel_base_path: str = ""
 
     awg_container: str = "amnezia-awg2"
@@ -44,9 +45,25 @@ def _load_secrets_file() -> dict[str, str]:
         "SECRET_KEY": "secret_key",
         "ADMIN_USER": "admin_user",
         "ADMIN_PASS": "admin_pass",
+        "API_TOKEN": "api_token",
+        "PANEL_BASE_PATH": "panel_base_path",
+        "AWG_CONTAINER": "awg_container",
+        "AWG_CONFIG_PATH": "awg_config_path",
+        "AWG_INTERFACE": "awg_interface",
+        "PUBLIC_ENDPOINT": "public_endpoint",
+        "DEFAULT_CLIENT_ALLOWED_IPS": "default_client_allowed_ips",
+        "DEFAULT_CLIENT_DNS": "default_client_dns",
         "secret_key": "secret_key",
         "admin_user": "admin_user",
         "admin_pass": "admin_pass",
+        "api_token": "api_token",
+        "panel_base_path": "panel_base_path",
+        "awg_container": "awg_container",
+        "awg_config_path": "awg_config_path",
+        "awg_interface": "awg_interface",
+        "public_endpoint": "public_endpoint",
+        "default_client_allowed_ips": "default_client_allowed_ips",
+        "default_client_dns": "default_client_dns",
     }
     for key, value in data.items():
         if key in mapping and value:
@@ -62,6 +79,14 @@ def get_settings() -> Settings:
         ("secret_key", "SECRET_KEY"),
         ("admin_user", "ADMIN_USER"),
         ("admin_pass", "ADMIN_PASS"),
+        ("api_token", "API_TOKEN"),
+        ("panel_base_path", "PANEL_BASE_PATH"),
+        ("awg_container", "AWG_CONTAINER"),
+        ("awg_config_path", "AWG_CONFIG_PATH"),
+        ("awg_interface", "AWG_INTERFACE"),
+        ("public_endpoint", "PUBLIC_ENDPOINT"),
+        ("default_client_allowed_ips", "DEFAULT_CLIENT_ALLOWED_IPS"),
+        ("default_client_dns", "DEFAULT_CLIENT_DNS"),
     ]:
         env_val = os.getenv(env_name)
         if env_val:

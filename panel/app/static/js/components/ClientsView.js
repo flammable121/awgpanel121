@@ -92,7 +92,7 @@ export const ClientsView = {
       peer.busy = true;
       peer.enabled = !peer.enabled;
       peer.status = peer.enabled ? "active" : "disabled";
-      peer.status_label = peer.enabled ? "Active" : "Disabled";
+      peer.status_label = peer.enabled ? "Активен" : "Отключен";
       if (!peer.enabled) {
         peer.online = false;
       }
@@ -100,7 +100,7 @@ export const ClientsView = {
         const data = await togglePeer(peer.id);
         peer.enabled = data.enabled;
         peer.status = data.status;
-        peer.status_label = data.status_label || (peer.enabled ? "Active" : "Disabled");
+        peer.status_label = data.status_label || (peer.enabled ? "Активен" : "Отключен");
       } catch (err) {
         peer.enabled = prevEnabled;
         peer.status = prevStatus;
