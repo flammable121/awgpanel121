@@ -25,13 +25,21 @@ export const ClientsView = {
     const loadPeers = async () => {
       try {
         const data = await fetchPeers();
-        peers.value = (data.peers || []).map((peer) => ({
-          ...peer,
-          busy: false,
-          online: false,
-          speed_rx: "0 B/s",
-          speed_tx: "0 B/s",
-        }));
+        const rows = data.rows || data.peers || [];
+        peers.value = rows.map((peer) => {
+          const total = peer?.traffic?.total ?? peer.traffic_total ?? 0;
+          const expiresSort = peer.expires_at ? Date.parse(peer.expires_at) : 0;
+          return {
+            ...peer,
+            busy: false,
+            online: false,
+            speed_rx: "0 B/s",
+            speed_tx: "0 B/s",
+            traffic_total: total,
+            traffic_display: formatBytes(total),
+            expires_sort: expiresSort,
+          };
+        });
       } catch (err) {
         alert("Не удалось загрузить клиентов");
       }
