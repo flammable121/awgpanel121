@@ -114,7 +114,7 @@ export const ApiInfoView = {
               {{ showToken ? 'Скрыть' : 'Показать' }}
             </button>
             <button class="btn ghost" type="button" @click="copyToken">Скопировать</button>
-            <button class="btn danger" type="button" @click="openReset">Сбросить</button>
+            <button class="btn danger" type="button" @click="openReset">Сбросить/перегенерировать API-ключ</button>
           </div>
         </label>
         <div v-if="message" class="muted">{{ message }}</div>

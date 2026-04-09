@@ -89,6 +89,27 @@ http://<IP_сервера>/<секретный_путь>/
 - Для домена сертификаты выдаёт Caddy и автоматически продлевает.
 - Панель рассчитана на работу с контейнером AmneziaWG, установленным через AmneziaVPN.
 
+## Структура проекта (backend)
+
+Код бэкенда разбит по модулям, чтобы легче было читать и поддерживать:
+
+```text
+panel/app/
+  main.py                # запуск FastAPI и подключение роутеров
+  core.py                # settings, base path, шаблоны
+  deps.py                # зависимости (DB, auth, API-key, AwgController)
+  routes/
+    auth.py              # login/logout/главная
+    peers.py             # клиенты + API для клиентов
+    awg.py               # параметры AmneziaWG и настройки
+    system.py            # метрики, трафик, перезапуски
+    api_info.py          # API info + reset token
+  services/
+    awg_service.py       # бизнес-логика AmneziaWG
+    traffic.py           # накопительный трафик и сброс
+    secrets.py           # работа с secrets
+```
+
 ## API (внешний доступ)
 
 API защищён токеном. Токен хранится в `.secrets/panel.json` в поле `API_TOKEN`.
