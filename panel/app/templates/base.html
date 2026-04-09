@@ -1,0 +1,13 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title or "AmneziaWG Panel" }}</title>
+  <link rel="stylesheet" href="{{ base_path }}/static/styles.css?v=29" />
+  <script>window.__PANEL_BASE__ = "{{ base_path }}";</script>
+</head>
+<body data-theme="dark">
+  {% block body %}{% endblock %}
+</body>
+</html>

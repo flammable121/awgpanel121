@@ -1,0 +1,53 @@
+﻿{% extends "base.html" %}
+{% block body %}
+<div class="layout narrow">
+  <header class="topbar">
+    <div>
+      <div class="brand">Редактирование</div>
+      <div class="subtitle">{{ peer.name }}</div>
+    </div>
+    <a class="btn ghost" href="{{ base_path }}/?tab=clients">Назад</a>
+  </header>
+
+  <section class="card">
+    <form method="post" class="form">
+      <label>
+        <span>Имя</span>
+        <input type="text" name="name" value="{{ peer.name }}" />
+      </label>
+      <div class="form-row form-row-inline">
+        <label>
+          <span>Дата</span>
+          <input type="date" name="expires_date" value="{{ expires_date }}" />
+        </label>
+        <label>
+          <span>Время</span>
+          <input type="time" name="expires_time" value="{{ expires_time }}" />
+        </label>
+        <label class="toggle">
+          <span class="toggle-text">Бессрочно</span>
+          <input type="checkbox" name="never_expires" value="1" {% if never_expires %}checked{% endif %} />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+      <label>
+        <span>Заметка</span>
+        <input type="text" name="note" value="{{ peer.note or '' }}" />
+      </label>
+      <button class="btn primary" type="submit">Сохранить</button>
+    </form>
+  </section>
+</div>
+<script>
+  const checkbox = document.querySelector('input[name="never_expires"]');
+  const dateInput = document.querySelector('input[name="expires_date"]');
+  const timeInput = document.querySelector('input[name="expires_time"]');
+  const sync = () => {
+    const disabled = checkbox?.checked;
+    if (dateInput) dateInput.disabled = disabled;
+    if (timeInput) timeInput.disabled = disabled;
+  };
+  checkbox?.addEventListener('change', sync);
+  sync();
+</script>
+{% endblock %}

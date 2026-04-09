@@ -1,0 +1,14 @@
+{$PANEL_DOMAIN::80} {
+  encode zstd gzip
+  @panel_path {
+    path {$PANEL_BASE_PATH:/} {$PANEL_BASE_PATH:/}/*
+  }
+  handle @panel_path {
+    handle_path {$PANEL_BASE_PATH:/}* {
+      reverse_proxy panel:8000
+    }
+  }
+  handle {
+    respond "Not Found" 404
+  }
+}

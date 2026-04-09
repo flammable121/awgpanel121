@@ -1,0 +1,23 @@
+﻿{% extends "base.html" %}
+{% block body %}
+<div class="auth">
+  <div class="card auth-card">
+    <div class="brand">AmneziaWG Panel</div>
+    <h1>Вход</h1>
+    <form method="post" class="form">
+      <label>
+        <span>Логин</span>
+        <input type="text" name="username" placeholder="admin" required />
+      </label>
+      <label>
+        <span>Пароль</span>
+        <input type="password" name="password" required />
+      </label>
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+      <button type="submit" class="btn primary">Войти</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

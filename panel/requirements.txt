@@ -1,0 +1,12 @@
+﻿fastapi
+uvicorn[standard]
+Jinja2
+python-multipart
+SQLAlchemy
+pydantic-settings
+itsdangerous
+docker
+qrcode
+Pillow
+psutil
+protobuf
