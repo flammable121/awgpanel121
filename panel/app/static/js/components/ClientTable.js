@@ -77,7 +77,7 @@ export const ClientTable = {
                 <button class="menu-button" type="button" @click.stop="toggleMenu(peer.id)">⋯</button>
                 <div v-if="openMenuId === peer.id" class="menu-popover" @click.stop>
                   <div class="menu-list">
-                    <button class="menu-item" type="button" @click="onConfig(peer)">
+                    <button class="menu-item" type="button" @click.stop="onConfig(peer)">
                       <span class="menu-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
                           <rect x="3" y="3" width="6" height="6" rx="1" />
@@ -89,7 +89,7 @@ export const ClientTable = {
                       </span>
                       QR-код
                     </button>
-                    <button class="menu-item" type="button" @click="onEdit(peer)">
+                    <button class="menu-item" type="button" @click.stop="onEdit(peer)">
                       <span class="menu-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
                           <path d="M12 20h9" />
@@ -98,7 +98,7 @@ export const ClientTable = {
                       </span>
                       Редактировать
                     </button>
-                    <button class="menu-item danger" type="button" @click="onDelete(peer)">
+                    <button class="menu-item danger" type="button" @click.stop="onDelete(peer)">
                       <span class="menu-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
                           <path d="M3 6h18" />

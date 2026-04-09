@@ -80,7 +80,7 @@ export const AwgInfoView = {
       <div class="collapse">
         <button class="collapse-header" :class="{ open: showAwg }" @click="showAwg = !showAwg">
           <span>Настройки AmneziaWG</span>
-          <span class="collapse-chevron">⌄</span>
+          <span class="collapse-chevron">v</span>
         </button>
         <div class="collapse-body" :class="{ open: showAwg }">
           <div class="collapse-inner">

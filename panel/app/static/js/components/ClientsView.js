@@ -86,13 +86,25 @@ export const ClientsView = {
     };
 
     const onToggle = async (peer) => {
+      const prevEnabled = peer.enabled;
+      const prevStatus = peer.status;
+      const prevLabel = peer.status_label;
       peer.busy = true;
+      peer.enabled = !peer.enabled;
+      peer.status = peer.enabled ? "active" : "disabled";
+      peer.status_label = peer.enabled ? "Active" : "Disabled";
+      if (!peer.enabled) {
+        peer.online = false;
+      }
       try {
         const data = await togglePeer(peer.id);
         peer.enabled = data.enabled;
         peer.status = data.status;
-        peer.status_label = data.status_label;
+        peer.status_label = data.status_label || (peer.enabled ? "Active" : "Disabled");
       } catch (err) {
+        peer.enabled = prevEnabled;
+        peer.status = prevStatus;
+        peer.status_label = prevLabel;
         alert("Не удалось изменить статус");
       } finally {
         peer.busy = false;
@@ -242,6 +254,7 @@ export const ClientsView = {
       deleteBusy,
       confirmDelete,
       cancelDelete,
+      withBase,
     };
   },
   template: `
