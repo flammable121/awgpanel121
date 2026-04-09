@@ -229,6 +229,9 @@ ENV
 
 echo ".env created at: $ENV_PATH"
 
+install -m 0755 "$SCRIPT_DIR/awgpanel-cli.sh" /usr/local/bin/awgpanel || true
+echo "CLI installed: awgpanel"
+
 if command -v ufw >/dev/null 2>&1; then
   read -r -p "Open ports 80 and 443 in UFW? [Y/n]: " OPEN_UFW
   OPEN_UFW=${OPEN_UFW:-Y}
