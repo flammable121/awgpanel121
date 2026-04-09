@@ -1,12 +1,34 @@
 #!/usr/bin/env bash
 set -e
 
-ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT_DIR=""
+
+if [ -n "$AWGPANEL_DIR" ] && [ -d "$AWGPANEL_DIR" ]; then
+  ROOT_DIR="$AWGPANEL_DIR"
+elif [ -f "./.secrets/panel.json" ]; then
+  ROOT_DIR="$(pwd)"
+else
+  for candidate in "/root/awgpanel" "/opt/awgpanel" "/srv/awgpanel"; do
+    if [ -f "$candidate/.secrets/panel.json" ]; then
+      ROOT_DIR="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -z "$ROOT_DIR" ]; then
+  echo "Unable to locate awgpanel directory."
+  echo "Set AWGPANEL_DIR=/path/to/awgpanel and retry."
+  exit 1
+fi
+
 SECRETS_PATH="$ROOT_DIR/.secrets/panel.json"
 CADDY_ENV_PATH="$ROOT_DIR/.secrets/caddy.env"
 
 if [ ! -f "$SECRETS_PATH" ]; then
   echo "Secrets file not found: $SECRETS_PATH"
+  echo "Set AWGPANEL_DIR=/path/to/awgpanel and retry."
   exit 1
 fi
 
