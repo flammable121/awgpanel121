@@ -1,4 +1,12 @@
-﻿FROM python:3.12-slim
+FROM node:20-alpine AS frontend
+
+WORKDIR /frontend
+COPY frontend/package.json /frontend/package.json
+RUN npm install
+COPY frontend /frontend
+RUN npm run build
+
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -13,6 +21,8 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY app /app/app
+RUN rm -rf /app/app/static/js
+COPY --from=frontend /frontend/dist /app/app/static/js
 
 ENV PANEL_DATA_DIR=/data
 VOLUME ["/data"]

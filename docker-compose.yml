@@ -1,6 +1,8 @@
 ﻿services:
   panel:
-    build: ./panel
+    build:
+      context: .
+      dockerfile: panel/Dockerfile
     volumes:
       - ./.secrets/panel.json:/data/secrets.json
       - panel-data:/data

@@ -1,26 +1,29 @@
-export const NewClientForm = {
-  name: "NewClientForm",
+<script>
+import ToggleSwitch from "./ToggleSwitch.vue";
+
+export default {
+  name: "CreateModal",
+  components: { ToggleSwitch },
   props: {
+    show: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
   },
-  emits: ["submit"],
+  emits: ["close", "submit"],
   data() {
     return {
       name: "",
       neverExpires: true,
       expiresDate: "",
       expiresTime: "",
-      maxDevices: 1,
     };
   },
   methods: {
-    onSubmit() {
+    submit() {
       this.$emit("submit", {
         name: this.name,
         never_expires: this.neverExpires ? "1" : "",
         expires_date: this.neverExpires ? "" : this.expiresDate,
         expires_time: this.neverExpires ? "" : this.expiresTime,
-        max_devices: this.maxDevices,
       });
       this.name = "";
       this.neverExpires = true;
@@ -28,15 +31,21 @@ export const NewClientForm = {
       this.expiresTime = "";
     },
   },
-  template: `
-    <section class="card">
-      <h2>Новый клиент</h2>
+};
+</script>
+
+<template>
+  <div v-if="show" class="modal-backdrop" @click.self="$emit('close')">
+    <div class="modal modal-form">
+      <div class="modal-header">
+        <h3>Создать конфигурацию</h3>
+      </div>
       <div class="form">
         <label>
           <span>Имя</span>
           <input type="text" v-model="name" placeholder="например, iPhone" />
         </label>
-        <div class="form-row">
+        <div class="form-row form-row-inline">
           <label>
             <span>Дата</span>
             <input type="date" v-model="expiresDate" :disabled="neverExpires" />
@@ -45,19 +54,18 @@ export const NewClientForm = {
             <span>Время</span>
             <input type="time" v-model="expiresTime" :disabled="neverExpires" />
           </label>
+          <div class="toggle-inline">
+            <span>Бессрочно</span>
+            <ToggleSwitch :checked="neverExpires" label="" @toggle="neverExpires = $event" />
+          </div>
         </div>
-        <label class="check">
-          <input type="checkbox" v-model="neverExpires" />
-          <span>Бессрочно</span>
-        </label>
-        <label>
-          <span>Устройства (0 = ∞)</span>
-          <input type="number" min="0" max="50" v-model.number="maxDevices" />
-        </label>
-        <button class="btn primary" type="button" :disabled="loading" @click="onSubmit">
+      </div>
+      <div class="modal-actions">
+        <button class="btn primary" type="button" :disabled="loading" @click="submit">
           {{ loading ? 'Создание...' : 'Создать' }}
         </button>
+        <button class="btn ghost" type="button" @click="$emit('close')">Отмена</button>
       </div>
-    </section>
-  `,
-};
+    </div>
+  </div>
+</template>
