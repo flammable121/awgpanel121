@@ -78,7 +78,7 @@ class AwgController:
             return
 
         # Fallback: restart interface if syncconf fails
-        fallback_cmd = f"sh -lc 'awg-quick down {iface} >/tmp/awgpanel_down.log 2>&1 || true; awg-quick up {cfg}'"
+        fallback_cmd = f"sh -lc 'awg-quick down {cfg} >/tmp/awgpanel_down.log 2>&1 || true; awg-quick up {cfg}'"
         fallback = self.exec(fallback_cmd)
         if fallback.exit_code != 0:
             detail = result.stderr or result.stdout or fallback.stderr or fallback.stdout
