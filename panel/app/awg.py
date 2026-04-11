@@ -80,10 +80,14 @@ class AwgController:
         # Fallback: restart interface if syncconf fails
         fallback_cmd = (
             "sh -lc '"
-            "awg-quick down {cfg} >/tmp/awgpanel_down.log 2>&1 || "
+            "if [ -d /etc/amnezia/amneziawg ]; then "
+            "cp {cfg} /etc/amnezia/amneziawg/{iface}.conf >/tmp/awgpanel_cp.log 2>&1 || true; "
+            "fi; "
             "awg-quick down {iface} >/tmp/awgpanel_down.log 2>&1 || "
+            "awg-quick down {cfg} >/tmp/awgpanel_down.log 2>&1 || "
             "ip link del {iface} >/tmp/awgpanel_down.log 2>&1 || true; "
-            "awg-quick up {cfg}"
+            "awg-quick up {iface} >/tmp/awgpanel_up.log 2>&1 || "
+            "awg-quick up {cfg} >/tmp/awgpanel_up.log 2>&1"
             "'"
         ).format(cfg=cfg, iface=iface)
         fallback = self.exec(fallback_cmd)
