@@ -326,6 +326,8 @@ def delete_peer(request: Request, peer_id: str, db=Depends(get_db)):
 
     interface_lines, _, _ = read_interface_config(controller)
     apply_config_from_db(db, controller, interface_lines)
+    if request.headers.get("x-requested-with") == "fetch":
+        return {"ok": True}
     return RedirectResponse(with_base("/"), status_code=303)
 
 

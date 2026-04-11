@@ -70,14 +70,19 @@ class AwgController:
             raise AwgError("Failed to write config to container")
 
     def apply_config(self) -> None:
-        cmd = (
-            "sh -lc "
-            "'awg-quick strip {cfg} > /tmp/awg0.conf && "
-            "awg syncconf {iface} /tmp/awg0.conf'"
-        ).format(cfg=shlex.quote(self.settings.awg_config_path), iface=shlex.quote(self.settings.awg_interface))
+        cfg = shlex.quote(self.settings.awg_config_path)
+        iface = shlex.quote(self.settings.awg_interface)
+        cmd = f"sh -lc 'awg-quick strip {cfg} > /tmp/awg0.conf && awg syncconf {iface} /tmp/awg0.conf'"
         result = self.exec(cmd)
-        if result.exit_code != 0:
-            raise AwgError(result.stderr or result.stdout)
+        if result.exit_code == 0:
+            return
+
+        # Fallback: restart interface if syncconf fails
+        fallback_cmd = f"sh -lc 'awg-quick down {iface} >/tmp/awgpanel_down.log 2>&1 || true; awg-quick up {cfg}'"
+        fallback = self.exec(fallback_cmd)
+        if fallback.exit_code != 0:
+            detail = result.stderr or result.stdout or fallback.stderr or fallback.stdout
+            raise AwgError(detail.strip() or "Unable to apply config")
 
     def genkey(self) -> str:
         result = self.exec("awg genkey")
