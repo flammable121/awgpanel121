@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { fetchPeers, togglePeer, deletePeer, fetchStats, createPeer, withBase } from "../api.js";
-import { formatBytes } from "../format.js";
+import { formatBytes, formatDateTime } from "../format.js";
 import ClientTable from "./ClientTable.vue";
 import ConfigModal from "./ConfigModal.vue";
 import CreateModal from "./CreateModal.vue";
@@ -26,6 +26,7 @@ const loadPeers = async () => {
     peers.value = rows.map((peer) => {
       const total = peer?.traffic?.total ?? peer.traffic_total ?? 0;
       const expiresSort = peer.expires_at ? Date.parse(peer.expires_at) : 0;
+      const expiresDisplay = peer.expires_at ? formatDateTime(peer.expires_at) : "∞";
       return {
         ...peer,
         busy: false,
@@ -35,6 +36,7 @@ const loadPeers = async () => {
         traffic_total: total,
         traffic_display: formatBytes(total),
         expires_sort: expiresSort,
+        expires_display: expiresDisplay,
       };
     });
   } catch (err) {

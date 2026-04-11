@@ -24,6 +24,7 @@ export default {
         never_expires: this.neverExpires ? "1" : "",
         expires_date: this.neverExpires ? "" : this.expiresDate,
         expires_time: this.neverExpires ? "" : this.expiresTime,
+        tz_offset: String(new Date().getTimezoneOffset()),
       });
       this.name = "";
       this.neverExpires = true;

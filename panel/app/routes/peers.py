@@ -211,11 +211,17 @@ def create_peer(
     expires_date: str = Form(""),
     expires_time: str = Form(""),
     never_expires: str = Form(""),
+    tz_offset: str = Form(""),
     db=Depends(get_db),
 ):
     require_login(request)
     controller = awg()
-    peer = build_new_peer(name, controller, db, parse_expires_from_form(expires_date, expires_time, never_expires))
+    peer = build_new_peer(
+        name,
+        controller,
+        db,
+        parse_expires_from_form(expires_date, expires_time, never_expires, tz_offset),
+    )
     return RedirectResponse(with_base("/?tab=clients"), status_code=303)
 
 
@@ -227,6 +233,7 @@ def edit_peer_page(request: Request, peer_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404)
     expires_date = peer.expires_at.strftime("%Y-%m-%d") if peer.expires_at else ""
     expires_time = peer.expires_at.strftime("%H:%M") if peer.expires_at else ""
+    expires_iso = (peer.expires_at.isoformat() + "Z") if peer.expires_at else ""
     return templates.TemplateResponse(
         request,
         "edit.html",
@@ -236,6 +243,7 @@ def edit_peer_page(request: Request, peer_id: str, db=Depends(get_db)):
             expires_value=format_date(peer.expires_at),
             expires_date=expires_date,
             expires_time=expires_time,
+            expires_iso=expires_iso,
             never_expires=peer.expires_at is None,
         ),
     )
@@ -249,6 +257,7 @@ def edit_peer_action(
     expires_date: str = Form(""),
     expires_time: str = Form(""),
     never_expires: str = Form(""),
+    tz_offset: str = Form(""),
     note: str = Form(""),
     db=Depends(get_db),
 ):
@@ -260,7 +269,7 @@ def edit_peer_action(
 
     peer.name = name.strip() or peer.name
     peer.note = note.strip() or None
-    peer.expires_at = parse_expires_from_form(expires_date, expires_time, never_expires)
+    peer.expires_at = parse_expires_from_form(expires_date, expires_time, never_expires, tz_offset)
     db.commit()
 
     interface_lines, _, _ = read_interface_config(controller)

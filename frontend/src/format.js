@@ -16,6 +16,17 @@ export function formatBytes(value) {
   return `${size.toFixed(1)} ${unit}`;
 }
 
+export function formatDateTime(value) {
+  if (!value) return "∞";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "∞";
+  const pad = (num) => String(num).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${year} ${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
 export function formatDuration(seconds) {
   let remaining = Math.max(0, Math.floor(seconds || 0));
   const days = Math.floor(remaining / 86400);

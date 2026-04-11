@@ -11,6 +11,8 @@
 
   <section class="card">
     <form method="post" class="form">
+      <input type="hidden" name="tz_offset" id="tz_offset" value="" />
+      <input type="hidden" id="expires_iso" value="{{ expires_iso }}" />
       <label>
         <span>Имя</span>
         <input type="text" name="name" value="{{ peer.name }}" />
@@ -42,6 +44,21 @@
   const checkbox = document.querySelector('input[name="never_expires"]');
   const dateInput = document.querySelector('input[name="expires_date"]');
   const timeInput = document.querySelector('input[name="expires_time"]');
+  const tzInput = document.querySelector('#tz_offset');
+  const isoValue = document.querySelector('#expires_iso')?.value;
+  if (tzInput) {
+    tzInput.value = String(new Date().getTimezoneOffset());
+  }
+  if (isoValue && dateInput && timeInput) {
+    const utc = new Date(isoValue);
+    if (!Number.isNaN(utc.getTime())) {
+      const offset = new Date().getTimezoneOffset();
+      const local = new Date(utc.getTime() - offset * 60000);
+      const pad = (num) => String(num).padStart(2, "0");
+      dateInput.value = `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`;
+      timeInput.value = `${pad(local.getHours())}:${pad(local.getMinutes())}`;
+    }
+  }
   const sync = () => {
     const disabled = checkbox?.checked;
     if (dateInput) dateInput.disabled = disabled;

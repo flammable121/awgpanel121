@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -84,7 +84,22 @@ def _parse_expires_value(value: Any) -> datetime | None:
     return parse_date(raw)
 
 
-def parse_expires_from_form(expires_date: str, expires_time: str, never_expires: str) -> datetime | None:
+def _apply_tz_offset(value: datetime, tz_offset: int | None) -> datetime:
+    if tz_offset is None:
+        return value
+    try:
+        minutes = int(tz_offset)
+    except (TypeError, ValueError):
+        return value
+    return value + timedelta(minutes=minutes)
+
+
+def parse_expires_from_form(
+    expires_date: str,
+    expires_time: str,
+    never_expires: str,
+    tz_offset: str | int | None = None,
+) -> datetime | None:
     if never_expires:
         return None
     expires_date = (expires_date or "").strip()
@@ -94,21 +109,28 @@ def parse_expires_from_form(expires_date: str, expires_time: str, never_expires:
     if not expires_time:
         expires_time = "00:00"
     try:
-        return datetime.strptime(f"{expires_date} {expires_time}", "%Y-%m-%d %H:%M")
+        parsed = datetime.strptime(f"{expires_date} {expires_time}", "%Y-%m-%d %H:%M")
     except ValueError:
-        return parse_date(f"{expires_date} {expires_time}")
+        parsed = parse_date(f"{expires_date} {expires_time}")
+        if not parsed:
+            return None
+    return _apply_tz_offset(parsed, tz_offset)
 
 
 def parse_expires_from_api(payload: dict[str, Any]) -> datetime | None:
     if parse_bool(payload.get("never_expires")):
         return None
+    tz_offset = payload.get("tz_offset")
     if "expires_at" in payload:
-        return _parse_expires_value(payload.get("expires_at"))
+        parsed = _parse_expires_value(payload.get("expires_at"))
+        if not parsed:
+            return None
+        return _apply_tz_offset(parsed, tz_offset)
     expires_date = str(payload.get("expires_date") or "").strip()
     expires_time = str(payload.get("expires_time") or "").strip()
     if not expires_date and not expires_time:
         return None
-    return parse_expires_from_form(expires_date, expires_time, "")
+    return parse_expires_from_form(expires_date, expires_time, "", tz_offset)
 
 
 def extract_ips(allowed_ips: str) -> list[str]:
@@ -293,7 +315,7 @@ def peer_basic_row(peer: Peer) -> dict[str, Any]:
         "enabled": peer.enabled,
         "status": status,
         "status_label": status_label(status),
-        "expires_at": peer.expires_at.isoformat() if peer.expires_at else None,
+        "expires_at": (peer.expires_at.isoformat() + "Z") if peer.expires_at else None,
         "expires_display": format_date(peer.expires_at) if peer.expires_at else "∞",
         "created_at": peer.created_at.isoformat() if peer.created_at else None,
         "public_key": peer.public_key,
@@ -345,7 +367,7 @@ def build_peers_payload(db, controller: AwgController) -> dict[str, Any]:
                 "enabled": peer.enabled,
                 "status": status,
                 "status_label": status_label(status),
-                "expires_at": peer.expires_at.isoformat() if peer.expires_at else None,
+                "expires_at": (peer.expires_at.isoformat() + "Z") if peer.expires_at else None,
                 "expires_display": format_date(peer.expires_at) if peer.expires_at else "∞",
                 "created_at": peer.created_at.isoformat() if peer.created_at else None,
                 "public_key": peer.public_key,
