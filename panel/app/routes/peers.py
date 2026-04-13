@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import RedirectResponse, Response
@@ -168,13 +167,14 @@ def api_v1_download_config(request: Request, peer_id: str, db=Depends(get_db), _
     raw_name = peer.name or peer.id
     safe_name = safe_filename(raw_name, peer.id)
     filename = f"{safe_name}.conf"
-    encoded = quote(f"{raw_name}.conf")
     return Response(
         content=config_text,
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded}",
+            "Content-Disposition": f"attachment; filename=\"{filename}\"",
             "X-Content-Type-Options": "nosniff",
+            "Content-Transfer-Encoding": "binary",
+            "Cache-Control": "no-store",
         },
     )
 
@@ -198,7 +198,10 @@ def api_v1_qr_config(request: Request, peer_id: str, db=Depends(get_db), _=Depen
     endpoint = ensure_endpoint(request, interface_kv)
     config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
 
-    img = qrcode.make(config_text.encode("utf-8"))
+    try:
+        img = qrcode.make(config_text.encode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"QR error: {exc}") from exc
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")
@@ -353,13 +356,14 @@ def download_config(request: Request, peer_id: str, db=Depends(get_db)):
     raw_name = peer.name or peer.id
     safe_name = safe_filename(raw_name, peer.id)
     filename = f"{safe_name}.conf"
-    encoded = quote(f"{raw_name}.conf")
     return Response(
         content=config_text,
         media_type="application/octet-stream",
         headers={
-            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded}",
+            "Content-Disposition": f"attachment; filename=\"{filename}\"",
             "X-Content-Type-Options": "nosniff",
+            "Content-Transfer-Encoding": "binary",
+            "Cache-Control": "no-store",
         },
     )
 
@@ -384,7 +388,10 @@ def qr_config(request: Request, peer_id: str, db=Depends(get_db)):
     endpoint = ensure_endpoint(request, interface_kv)
     config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
 
-    img = qrcode.make(config_text.encode("utf-8"))
+    try:
+        img = qrcode.make(config_text.encode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"QR error: {exc}") from exc
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")

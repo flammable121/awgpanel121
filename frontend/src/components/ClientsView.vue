@@ -173,10 +173,27 @@ const copyUrl = async () => {
   if (!modalPeer.value) return;
   const url = `${window.location.origin}${withBase(`/peers/${modalPeer.value.id}/config`)}`;
   try {
-    await navigator.clipboard.writeText(url);
-    alert("URL скопирован");
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url);
+      alert("URL скопирован");
+      return;
+    }
+    const textarea = document.createElement("textarea");
+    textarea.value = url;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "absolute";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    if (ok) {
+      alert("URL скопирован");
+    } else {
+      prompt("Скопируйте URL вручную:", url);
+    }
   } catch (err) {
-    alert("Не удалось скопировать URL");
+    prompt("Скопируйте URL вручную:", url);
   }
 };
 
