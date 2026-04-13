@@ -198,7 +198,7 @@ def api_v1_qr_config(request: Request, peer_id: str, db=Depends(get_db), _=Depen
     endpoint = ensure_endpoint(request, interface_kv)
     config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
 
-    img = qrcode.make(config_text)
+    img = qrcode.make(config_text.encode("utf-8"))
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")
@@ -384,7 +384,7 @@ def qr_config(request: Request, peer_id: str, db=Depends(get_db)):
     endpoint = ensure_endpoint(request, interface_kv)
     config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
 
-    img = qrcode.make(config_text)
+    img = qrcode.make(config_text.encode("utf-8"))
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")
