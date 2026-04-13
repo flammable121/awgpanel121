@@ -27,7 +27,7 @@ const saving = ref(false);
 const message = ref("");
 const showAwg = ref(true);
 const showRanges = ref(false);
-const showDefaults = ref(true);
+const showDefaults = ref(false);
 
 const settingsForm = ref({
   public_endpoint: "",
