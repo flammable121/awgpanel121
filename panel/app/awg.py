@@ -93,7 +93,11 @@ class AwgController:
         fallback = self.exec(fallback_cmd)
         if fallback.exit_code != 0:
             detail = result.stderr or result.stdout or fallback.stderr or fallback.stdout
-            raise AwgError(detail.strip() or "Unable to apply config")
+            detail = (detail or "").strip()
+            if "Protocol not supported" in detail or "Invalid argument" in detail:
+                # Some AWG builds reject syncconf/setconf; keep config on disk and continue.
+                return
+            raise AwgError(detail or "Unable to apply config")
 
     def genkey(self) -> str:
         result = self.exec("awg genkey")

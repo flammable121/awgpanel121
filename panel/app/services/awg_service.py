@@ -198,7 +198,12 @@ def read_interface_config(
     return parse_config(text)
 
 
-def apply_config_from_db(db, controller: AwgController, interface_lines: list[str] | None = None) -> None:
+def apply_config_from_db(
+    db,
+    controller: AwgController,
+    interface_lines: list[str] | None = None,
+    allow_fail: bool = False,
+) -> str | None:
     if interface_lines is None:
         interface_lines, _, _ = parse_config(controller.read_config())
 
@@ -217,7 +222,15 @@ def apply_config_from_db(db, controller: AwgController, interface_lines: list[st
 
     new_config = build_config(interface_lines, active_peers)
     controller.write_config(new_config)
-    controller.apply_config()
+    try:
+        controller.apply_config()
+    except AwgError as exc:
+        if allow_fail:
+            message = str(exc)
+            print(f"[awgpanel] apply_config warning: {message}")
+            return message
+        raise
+    return None
 
 
 def get_server_public_key(controller: AwgController) -> str:
@@ -339,7 +352,7 @@ def build_peers_payload(db, controller: AwgController) -> dict[str, Any]:
     if expired_updates:
         db.commit()
         try:
-            apply_config_from_db(db, controller, interface_lines)
+            apply_config_from_db(db, controller, interface_lines, allow_fail=True)
         except AwgError:
             pass
 
@@ -396,6 +409,7 @@ def build_new_peer(
     controller: AwgController,
     db,
     expires_at: datetime | None,
+    allow_apply_fail: bool = False,
 ) -> Peer:
     interface_lines, interface_kv, peers_cfg = read_interface_config(controller)
 
@@ -440,5 +454,5 @@ def build_new_peer(
     db.add(peer)
     db.commit()
 
-    apply_config_from_db(db, controller, interface_lines)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=allow_apply_fail)
     return peer

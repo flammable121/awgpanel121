@@ -63,7 +63,7 @@ async def api_v1_create_peer(request: Request, db=Depends(get_db), _=Depends(req
 
     name = str(payload.get("name") or "").strip()
     expires_at = parse_expires_from_api(payload)
-    peer = build_new_peer(name, controller, db, expires_at)
+    peer = build_new_peer(name, controller, db, expires_at, allow_apply_fail=True)
 
     if "client_allowed_ips" in payload:
         val = str(payload.get("client_allowed_ips") or "").strip()
@@ -80,7 +80,7 @@ async def api_v1_create_peer(request: Request, db=Depends(get_db), _=Depends(req
     db.commit()
 
     interface_lines, _, _ = read_interface_config(controller)
-    apply_config_from_db(db, controller, interface_lines)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=True)
     return {"ok": True, "peer": peer_basic_row(peer)}
 
 
@@ -116,7 +116,7 @@ async def api_v1_update_peer(request: Request, peer_id: str, db=Depends(get_db),
 
     db.commit()
     interface_lines, _, _ = read_interface_config(controller)
-    apply_config_from_db(db, controller, interface_lines)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=True)
     return {"ok": True, "peer": peer_basic_row(peer)}
 
 
@@ -130,7 +130,7 @@ def api_v1_toggle_peer(request: Request, peer_id: str, db=Depends(get_db), _=Dep
     db.commit()
 
     interface_lines, _, _ = read_interface_config(controller)
-    apply_config_from_db(db, controller, interface_lines)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=True)
     return {"ok": True, "peer": peer_basic_row(peer)}
 
 
@@ -144,7 +144,7 @@ def api_v1_delete_peer(request: Request, peer_id: str, db=Depends(get_db), _=Dep
     db.commit()
 
     interface_lines, _, _ = read_interface_config(controller)
-    apply_config_from_db(db, controller, interface_lines)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=True)
     return {"ok": True}
 
 
@@ -221,6 +221,7 @@ def create_peer(
         controller,
         db,
         parse_expires_from_form(expires_date, expires_time, never_expires, tz_offset),
+        allow_apply_fail=True,
     )
     return RedirectResponse(with_base("/?tab=clients"), status_code=303)
 
@@ -273,7 +274,7 @@ def edit_peer_action(
     db.commit()
 
     interface_lines, _, _ = read_interface_config(controller)
-    apply_config_from_db(db, controller, interface_lines)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=True)
     return RedirectResponse(with_base("/"), status_code=303)
 
 
@@ -288,7 +289,7 @@ def toggle_peer(request: Request, peer_id: str, db=Depends(get_db)):
     db.commit()
 
     interface_lines, _, _ = read_interface_config(controller)
-    apply_config_from_db(db, controller, interface_lines)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=True)
     return RedirectResponse(with_base("/"), status_code=303)
 
 
@@ -303,7 +304,7 @@ def toggle_peer_api(request: Request, peer_id: str, db=Depends(get_db)):
     db.commit()
 
     interface_lines, _, _ = read_interface_config(controller)
-    apply_config_from_db(db, controller, interface_lines)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=True)
 
     status = get_peer_status(peer, utc_now())
     return {
@@ -325,7 +326,7 @@ def delete_peer(request: Request, peer_id: str, db=Depends(get_db)):
     db.commit()
 
     interface_lines, _, _ = read_interface_config(controller)
-    apply_config_from_db(db, controller, interface_lines)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=True)
     if request.headers.get("x-requested-with") == "fetch":
         return {"ok": True}
     return RedirectResponse(with_base("/"), status_code=303)
