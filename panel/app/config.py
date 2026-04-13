@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     public_endpoint: str | None = None
     default_client_allowed_ips: str = "0.0.0.0/0, ::/0"
     default_client_dns: str | None = None
+    client_name_key: str | None = "Name"
 
     # WARP/Xray settings removed
 
@@ -53,6 +54,7 @@ def _load_secrets_file() -> dict[str, str]:
         "PUBLIC_ENDPOINT": "public_endpoint",
         "DEFAULT_CLIENT_ALLOWED_IPS": "default_client_allowed_ips",
         "DEFAULT_CLIENT_DNS": "default_client_dns",
+        "CLIENT_NAME_KEY": "client_name_key",
         "secret_key": "secret_key",
         "admin_user": "admin_user",
         "admin_pass": "admin_pass",
@@ -64,6 +66,7 @@ def _load_secrets_file() -> dict[str, str]:
         "public_endpoint": "public_endpoint",
         "default_client_allowed_ips": "default_client_allowed_ips",
         "default_client_dns": "default_client_dns",
+        "client_name_key": "client_name_key",
     }
     for key, value in data.items():
         if key in mapping and value:
@@ -87,6 +90,7 @@ def get_settings() -> Settings:
         ("public_endpoint", "PUBLIC_ENDPOINT"),
         ("default_client_allowed_ips", "DEFAULT_CLIENT_ALLOWED_IPS"),
         ("default_client_dns", "DEFAULT_CLIENT_DNS"),
+        ("client_name_key", "CLIENT_NAME_KEY"),
     ]:
         env_val = os.getenv(env_name)
         if env_val:

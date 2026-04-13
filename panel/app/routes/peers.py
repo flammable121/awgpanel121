@@ -275,7 +275,7 @@ def edit_peer_action(
 
     interface_lines, _, _ = read_interface_config(controller)
     apply_config_from_db(db, controller, interface_lines, allow_fail=True)
-    return RedirectResponse(with_base("/"), status_code=303)
+    return RedirectResponse(with_base("/?tab=clients"), status_code=303)
 
 
 @router.post("/peers/{peer_id}/toggle")
