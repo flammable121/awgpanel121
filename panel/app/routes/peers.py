@@ -163,10 +163,13 @@ def api_v1_download_config(request: Request, peer_id: str, db=Depends(get_db), _
             detail="Конфиг недоступен: приватный ключ отсутствует. Создайте новый конфиг в панели.",
         )
 
-    interface_lines, interface_kv, _ = read_interface_config(controller)
-    server_pub = get_server_public_key(controller)
-    endpoint = ensure_endpoint(request, interface_kv)
-    config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+    try:
+        interface_lines, interface_kv, _ = read_interface_config(controller)
+        server_pub = get_server_public_key(controller)
+        endpoint = ensure_endpoint(request, interface_kv)
+        config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+    except AwgError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     raw_name = peer.name or peer.id
     safe_name = safe_filename(raw_name, peer.id)
@@ -197,10 +200,13 @@ def api_v1_qr_config(request: Request, peer_id: str, db=Depends(get_db), _=Depen
             detail="Конфиг недоступен: приватный ключ отсутствует. Создайте новый конфиг в панели.",
         )
 
-    interface_lines, interface_kv, _ = read_interface_config(controller)
-    server_pub = get_server_public_key(controller)
-    endpoint = ensure_endpoint(request, interface_kv)
-    config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+    try:
+        interface_lines, interface_kv, _ = read_interface_config(controller)
+        server_pub = get_server_public_key(controller)
+        endpoint = ensure_endpoint(request, interface_kv)
+        config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+    except AwgError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     try:
         img = qrcode.make(config_text.encode("utf-8"))
@@ -358,10 +364,13 @@ def download_config(request: Request, peer_id: str, db=Depends(get_db)):
             detail="Конфиг недоступен: приватный ключ отсутствует. Создайте новый конфиг в панели.",
         )
 
-    interface_lines, interface_kv, _ = read_interface_config(controller)
-    server_pub = get_server_public_key(controller)
-    endpoint = ensure_endpoint(request, interface_kv)
-    config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+    try:
+        interface_lines, interface_kv, _ = read_interface_config(controller)
+        server_pub = get_server_public_key(controller)
+        endpoint = ensure_endpoint(request, interface_kv)
+        config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+    except AwgError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     raw_name = peer.name or peer.id
     safe_name = safe_filename(raw_name, peer.id)
@@ -393,10 +402,13 @@ def qr_config(request: Request, peer_id: str, db=Depends(get_db)):
             detail="Конфиг недоступен: приватный ключ отсутствует. Создайте новый конфиг в панели.",
         )
 
-    interface_lines, interface_kv, _ = read_interface_config(controller)
-    server_pub = get_server_public_key(controller)
-    endpoint = ensure_endpoint(request, interface_kv)
-    config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+    try:
+        interface_lines, interface_kv, _ = read_interface_config(controller)
+        server_pub = get_server_public_key(controller)
+        endpoint = ensure_endpoint(request, interface_kv)
+        config_text = build_client_config(peer, interface_kv, server_pub, endpoint)
+    except AwgError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     try:
         img = qrcode.make(config_text.encode("utf-8"))

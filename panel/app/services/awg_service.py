@@ -234,10 +234,38 @@ def apply_config_from_db(
 
 
 def get_server_public_key(controller: AwgController) -> str:
-    output = controller.show()
-    for line in output.splitlines():
-        if line.strip().startswith("public key:"):
-            return line.split(":", 1)[1].strip()
+    output = ""
+    try:
+        output = controller.show()
+    except AwgError:
+        output = ""
+
+    for line in (output or "").splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        lowered = raw.lower()
+        if "public key" not in lowered:
+            continue
+        if ":" in raw:
+            value = raw.split(":", 1)[1].strip()
+            if value:
+                return value
+
+    # Fallback: derive from server PrivateKey in the config file.
+    try:
+        interface_lines, interface_kv, _ = parse_config(controller.read_config())
+    except AwgError as exc:
+        raise AwgError(str(exc) or "Unable to read server config") from exc
+
+    private_key = ""
+    for key, value in (interface_kv or {}).items():
+        if key.strip().lower() == "privatekey":
+            private_key = (value or "").strip()
+            break
+    if private_key:
+        return controller.pubkey(private_key)
+
     raise AwgError("Unable to read server public key")
 
 
