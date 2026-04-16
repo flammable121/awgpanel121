@@ -294,10 +294,6 @@ def build_client_config(
 
     lines: list[str] = ["[Interface]"]
     lines.append(f"PrivateKey = {peer.private_key}")
-    if settings.client_name_key and peer.name:
-        safe_name = peer.name.replace("\r", " ").replace("\n", " ").strip()
-        if safe_name:
-            lines.append(f"{settings.client_name_key} = {safe_name}")
     lines.append(f"Address = {peer.allowed_ips}")
 
     dns = peer.client_dns or settings.default_client_dns

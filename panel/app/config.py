@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     public_endpoint: str | None = None
     default_client_allowed_ips: str = "0.0.0.0/0, ::/0"
     default_client_dns: str | None = None
-    client_name_key: str | None = "Name"
+    client_name_key: str | None = None
 
     # WARP/Xray settings removed
 
