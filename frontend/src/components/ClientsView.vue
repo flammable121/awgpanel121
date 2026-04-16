@@ -22,7 +22,6 @@ let statsTimer = null;
 const lastStats = new Map();
 
 const loadPeers = async () => {
-  if (!url) return;
   try {
     const data = await fetchPeers();
     const rows = data.rows || data.peers || [];
