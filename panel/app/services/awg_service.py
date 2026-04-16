@@ -23,6 +23,22 @@ from ..utils import (
 from .traffic import update_peer_traffic_state
 
 
+def _strip_inline_comment(value: str) -> str:
+    if not value:
+        return ""
+    raw = str(value)
+    for sep in ("#", ";"):
+        if sep in raw:
+            raw = raw.split(sep, 1)[0]
+    return raw.strip()
+
+
+def _first_int_token(value: str) -> str:
+    raw = _strip_inline_comment(value)
+    match = re.search(r"\d+", raw)
+    return match.group(0) if match else ""
+
+
 def is_active(peer: Peer) -> bool:
     if not peer.enabled:
         return False
@@ -272,14 +288,16 @@ def get_server_public_key(controller: AwgController) -> str:
 def get_listen_port(interface_kv: dict[str, str]) -> str:
     for key, value in interface_kv.items():
         if key.lower() == "listenport":
-            return value
+            port = _first_int_token(str(value))
+            return port or "51820"
     return "51820"
 
 
 def get_param(interface_kv: dict[str, str], name: str) -> str | None:
     for key, value in interface_kv.items():
         if key.lower() == name.lower():
-            return value
+            cleaned = _strip_inline_comment(str(value))
+            return cleaned or None
     return None
 
 
