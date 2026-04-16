@@ -5,6 +5,7 @@ import io
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import RedirectResponse, Response
 
+from ..awg import AwgError
 from ..deps import require_login, require_api_key, awg, get_db
 from ..core import templates, template_context, with_base
 from ..models import Peer
@@ -62,7 +63,10 @@ async def api_v1_create_peer(request: Request, db=Depends(get_db), _=Depends(req
 
     name = str(payload.get("name") or "").strip()
     expires_at = parse_expires_from_api(payload)
-    peer = build_new_peer(name, controller, db, expires_at, allow_apply_fail=True)
+    try:
+        peer = build_new_peer(name, controller, db, expires_at, allow_apply_fail=True)
+    except AwgError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     if "client_allowed_ips" in payload:
         val = str(payload.get("client_allowed_ips") or "").strip()
@@ -219,13 +223,19 @@ def create_peer(
 ):
     require_login(request)
     controller = awg()
-    peer = build_new_peer(
-        name,
-        controller,
-        db,
-        parse_expires_from_form(expires_date, expires_time, never_expires, tz_offset),
-        allow_apply_fail=True,
-    )
+    try:
+        peer = build_new_peer(
+            name,
+            controller,
+            db,
+            parse_expires_from_form(expires_date, expires_time, never_expires, tz_offset),
+            allow_apply_fail=True,
+        )
+    except AwgError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    if request.headers.get("x-requested-with") == "fetch":
+        return {"ok": True, "peer": peer_basic_row(peer)}
     return RedirectResponse(with_base("/?tab=clients"), status_code=303)
 
 

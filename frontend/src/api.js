@@ -152,11 +152,28 @@ export async function createPeer(name) {
   }
   const response = await fetch(withBase("/peers"), {
     method: "POST",
+    headers: { "X-Requested-With": "fetch" },
     body: form,
     credentials: "same-origin",
   });
-  if (!response.ok && response.status !== 303) {
-    throw new Error("Create failed");
+  if (!response.ok) {
+    let detail = `Request failed: ${response.status}`;
+    try {
+      const data = await response.json();
+      if (data && data.detail) detail = data.detail;
+    } catch (err) {
+      try {
+        const text = await response.text();
+        if (text) detail = text;
+      } catch (e) {
+        // ignore
+      }
+    }
+    throw new Error(detail);
+  }
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return response.json();
   }
   return true;
 }

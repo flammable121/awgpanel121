@@ -153,6 +153,10 @@ const onCreate = async (payload) => {
     await loadPeers();
     createOpen.value = false;
   } catch (err) {
+    if (err?.message) {
+      alert(err.message);
+      return;
+    }
     alert("Не удалось создать клиента");
   } finally {
     creating.value = false;
@@ -184,6 +188,7 @@ const closeModal = () => {
 const copyUrl = async () => {
   if (!modalPeer.value) return;
   const url = modalConfigUrl.value ? `${window.location.origin}${modalConfigUrl.value}` : "";
+  if (!url) return;
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(url);
