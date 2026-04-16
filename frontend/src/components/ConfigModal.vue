@@ -34,7 +34,6 @@ export default {
           v-if="available"
           class="btn primary"
           :href="configUrl"
-          :download="(title || 'config') + '.conf'"
         >
           Скачать файл
         </a>

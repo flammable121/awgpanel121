@@ -12,6 +12,8 @@ const filter = ref("");
 const sortKey = ref("name");
 const sortDir = ref(1);
 const modalPeer = ref(null);
+const modalQrUrl = ref("");
+const modalConfigUrl = ref("");
 const createOpen = ref(false);
 const creating = ref(false);
 const deletePeerTarget = ref(null);
@@ -20,6 +22,7 @@ let statsTimer = null;
 const lastStats = new Map();
 
 const loadPeers = async () => {
+  if (!url) return;
   try {
     const data = await fetchPeers();
     const rows = data.rows || data.peers || [];
@@ -158,6 +161,13 @@ const onCreate = async (payload) => {
 
 const onConfig = (peer) => {
   modalPeer.value = peer;
+  if (!peer) {
+    modalQrUrl.value = "";
+    modalConfigUrl.value = "";
+    return;
+  }
+  modalQrUrl.value = withBase(`/peers/${peer.id}/qr?t=${Date.now()}`);
+  modalConfigUrl.value = withBase(`/peers/${peer.id}/config`);
 };
 
 const onEdit = (peer) => {
@@ -167,11 +177,13 @@ const onEdit = (peer) => {
 
 const closeModal = () => {
   modalPeer.value = null;
+  modalQrUrl.value = "";
+  modalConfigUrl.value = "";
 };
 
 const copyUrl = async () => {
   if (!modalPeer.value) return;
-  const url = `${window.location.origin}${withBase(`/peers/${modalPeer.value.id}/config`)}`;
+  const url = modalConfigUrl.value ? `${window.location.origin}${modalConfigUrl.value}` : "";
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(url);
@@ -276,8 +288,8 @@ const closeCreate = () => {
 
   <ConfigModal
     :show="!!modalPeer"
-    :qr-url="modalPeer ? withBase('/peers/' + modalPeer.id + '/qr?t=' + Date.now()) : ''"
-    :config-url="modalPeer ? withBase('/peers/' + modalPeer.id + '/config') : ''"
+    :qr-url="modalQrUrl"
+    :config-url="modalConfigUrl"
     :title="modalPeer ? modalPeer.name : 'Конфигурация'"
     :available="modalPeer ? !!modalPeer.has_private_key : true"
     @close="closeModal"
