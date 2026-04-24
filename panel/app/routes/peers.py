@@ -25,6 +25,7 @@ from ..services.awg_service import (
     peer_basic_row,
     safe_filename,
     parse_bool,
+    should_reactivate_peer,
 )
 
 router = APIRouter()
@@ -115,7 +116,10 @@ async def api_v1_update_peer(request: Request, peer_id: str, db=Depends(get_db),
     if "enabled" in payload:
         peer.enabled = parse_bool(payload.get("enabled"))
     if "expires_at" in payload or "expires_date" in payload or "expires_time" in payload or "never_expires" in payload:
-        peer.expires_at = parse_expires_from_api(payload)
+        new_expires_at = parse_expires_from_api(payload)
+        if "enabled" not in payload and should_reactivate_peer(peer.expires_at, new_expires_at):
+            peer.enabled = True
+        peer.expires_at = new_expires_at
 
     db.commit()
     interface_lines, _, _ = read_interface_config(controller)
@@ -289,7 +293,10 @@ def edit_peer_action(
 
     peer.name = name.strip() or peer.name
     peer.note = note.strip() or None
-    peer.expires_at = parse_expires_from_form(expires_date, expires_time, never_expires, tz_offset)
+    new_expires_at = parse_expires_from_form(expires_date, expires_time, never_expires, tz_offset)
+    if should_reactivate_peer(peer.expires_at, new_expires_at):
+        peer.enabled = True
+    peer.expires_at = new_expires_at
     db.commit()
 
     interface_lines, _, _ = read_interface_config(controller)

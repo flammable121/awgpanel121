@@ -58,6 +58,23 @@ with open(path, "w", encoding="utf-8") as fh:
 PY
 }
 
+hash_password_pbkdf2() {
+  python3 - "$1" <<'PY'
+import base64
+import hashlib
+import secrets
+import sys
+
+password = sys.argv[1]
+salt = secrets.token_bytes(16)
+iterations = 310000
+digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+print(
+    f"pbkdf2_sha256${iterations}${base64.b64encode(salt).decode('ascii')}${base64.b64encode(digest).decode('ascii')}"
+)
+PY
+}
+
 PANEL_BASE_PATH="$(read_json PANEL_BASE_PATH)"
 ADMIN_USER="$(read_json ADMIN_USER)"
 
@@ -107,9 +124,10 @@ case "$CHANGE" in
       fi
       break
     done
+    NEW_PASS_HASH=$(hash_password_pbkdf2 "$NEW_PASS")
     payload=$(python3 - <<PY
 import json
-print(json.dumps({"ADMIN_USER": "$NEW_USER", "ADMIN_PASS": "$NEW_PASS"}))
+print(json.dumps({"ADMIN_USER": "$NEW_USER", "ADMIN_PASS": "$NEW_PASS_HASH"}))
 PY
 )
     write_json "$payload" >/dev/null

@@ -93,26 +93,6 @@ def _restart_server() -> None:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    client = docker.from_env()
-    images = ["busybox:1.36", "alpine:3.20"]
-    for image in images:
-        try:
-            client.containers.run(
-                image=image,
-                command=["/sbin/reboot", "-f"],
-                remove=True,
-                privileged=True,
-                pid_mode="host",
-                network_mode="host",
-            )
-            return
-        except DockerAPIError as exc:
-            last_error = exc
-            continue
-        except Exception as exc:
-            last_error = exc
-            continue
-
     raise HTTPException(status_code=500, detail=str(last_error or "reboot failed"))
 
 
@@ -188,12 +168,16 @@ def api_system(request: Request):
         "overall_rx_display": format_bytes(overall_rx),
         "overall_tx_display": format_bytes(overall_tx),
         "overall_total_display": format_bytes(overall_total),
+        "allow_container_restart": bool(settings.allow_container_restart),
+        "allow_system_reboot": bool(settings.allow_system_reboot),
     }
 
 
 @router.post("/api/restart/awg")
 def restart_awg(request: Request):
     require_login(request)
+    if not settings.allow_container_restart:
+        raise HTTPException(status_code=403, detail="Container restart is disabled")
     _restart_container(settings.awg_container)
     return {"ok": True}
 
@@ -201,6 +185,8 @@ def restart_awg(request: Request):
 @router.post("/api/restart/panel")
 def restart_panel(request: Request):
     require_login(request)
+    if not settings.allow_container_restart:
+        raise HTTPException(status_code=403, detail="Container restart is disabled")
     container_name = os.environ.get("HOSTNAME") or ""
     if not container_name:
         raise HTTPException(status_code=500, detail="Panel container name not found")
@@ -211,6 +197,8 @@ def restart_panel(request: Request):
 @router.post("/api/restart/server")
 def restart_server(request: Request):
     require_login(request)
+    if not settings.allow_system_reboot:
+        raise HTTPException(status_code=403, detail="Server reboot is disabled")
 
     def _bg_restart() -> None:
         try:

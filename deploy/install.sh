@@ -40,6 +40,28 @@ install_docker() {
   systemctl enable --now docker || service docker start || true
 }
 
+hash_password_pbkdf2() {
+  local raw_password="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$raw_password" <<'PY'
+import base64
+import hashlib
+import secrets
+import sys
+
+password = sys.argv[1]
+salt = secrets.token_bytes(16)
+iterations = 310000
+digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+print(
+    f"pbkdf2_sha256${iterations}${base64.b64encode(salt).decode('ascii')}${base64.b64encode(digest).decode('ascii')}"
+)
+PY
+    return
+  fi
+  echo "$raw_password"
+}
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is not installed."
   read -r -p "Install Docker automatically? [Y/n]: " INSTALL_DOCKER
@@ -162,6 +184,11 @@ while true; do
   break
 done
 
+ADMIN_PASS_HASH=$(hash_password_pbkdf2 "$ADMIN_PASS")
+if [ "$ADMIN_PASS_HASH" = "$ADMIN_PASS" ]; then
+  echo "Warning: python3 not found, storing ADMIN_PASS in legacy plain-text format."
+fi
+
 if command -v openssl >/dev/null 2>&1; then
   SECRET_KEY=$(openssl rand -hex 32)
 elif command -v python3 >/dev/null 2>&1; then
@@ -196,11 +223,40 @@ if [ -f "$ENV_PATH" ] || [ -f "$SECRETS_PATH" ]; then
 fi
 
 mkdir -p "$SECRETS_DIR"
-cat > "$SECRETS_PATH" <<ENV
+if command -v python3 >/dev/null 2>&1; then
+  export SECRET_KEY ADMIN_USER ADMIN_PASS_HASH API_TOKEN PANEL_BASE_PATH
+  export AWG_CONTAINER AWG_CONFIG_PATH AWG_INTERFACE PUBLIC_ENDPOINT
+  export DEFAULT_CLIENT_ALLOWED_IPS DEFAULT_CLIENT_DNS
+  python3 - "$SECRETS_PATH" <<'PY'
+import json
+import os
+import sys
+
+path = sys.argv[1]
+data = {
+    "SECRET_KEY": os.environ.get("SECRET_KEY", ""),
+    "ADMIN_USER": os.environ.get("ADMIN_USER", "admin"),
+    "ADMIN_PASS": os.environ.get("ADMIN_PASS_HASH", ""),
+    "API_TOKEN": os.environ.get("API_TOKEN", ""),
+    "PANEL_BASE_PATH": os.environ.get("PANEL_BASE_PATH", ""),
+    "AWG_CONTAINER": os.environ.get("AWG_CONTAINER", "amnezia-awg2"),
+    "AWG_CONFIG_PATH": os.environ.get("AWG_CONFIG_PATH", "/opt/amnezia/awg/awg0.conf"),
+    "AWG_INTERFACE": os.environ.get("AWG_INTERFACE", "awg0"),
+    "PUBLIC_ENDPOINT": os.environ.get("PUBLIC_ENDPOINT", ""),
+    "DEFAULT_CLIENT_ALLOWED_IPS": os.environ.get("DEFAULT_CLIENT_ALLOWED_IPS", "0.0.0.0/0, ::/0"),
+    "DEFAULT_CLIENT_DNS": os.environ.get("DEFAULT_CLIENT_DNS", "1.1.1.1, 8.8.8.8"),
+    "ALLOW_CONTAINER_RESTART": False,
+    "ALLOW_SYSTEM_REBOOT": False,
+}
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, ensure_ascii=False, indent=2)
+PY
+else
+  cat > "$SECRETS_PATH" <<ENV
 {
   "SECRET_KEY": "$SECRET_KEY",
   "ADMIN_USER": "$ADMIN_USER",
-  "ADMIN_PASS": "$ADMIN_PASS",
+  "ADMIN_PASS": "$ADMIN_PASS_HASH",
   "API_TOKEN": "$API_TOKEN",
   "PANEL_BASE_PATH": "$PANEL_BASE_PATH",
   "AWG_CONTAINER": "$AWG_CONTAINER",
@@ -208,9 +264,12 @@ cat > "$SECRETS_PATH" <<ENV
   "AWG_INTERFACE": "$AWG_INTERFACE",
   "PUBLIC_ENDPOINT": "$PUBLIC_ENDPOINT",
   "DEFAULT_CLIENT_ALLOWED_IPS": "$DEFAULT_CLIENT_ALLOWED_IPS",
-  "DEFAULT_CLIENT_DNS": "$DEFAULT_CLIENT_DNS"
+  "DEFAULT_CLIENT_DNS": "$DEFAULT_CLIENT_DNS",
+  "ALLOW_CONTAINER_RESTART": false,
+  "ALLOW_SYSTEM_REBOOT": false
 }
 ENV
+fi
 chmod 600 "$SECRETS_PATH" || true
 
 echo ".secrets/panel.json created."

@@ -9,9 +9,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    secret_key: str = "change-me"
+    secret_key: str = ""
     admin_user: str = "admin"
-    admin_pass: str = "change-me"
+    admin_pass: str = ""
     api_token: str = ""
     panel_base_path: str = ""
 
@@ -23,13 +23,15 @@ class Settings(BaseSettings):
     default_client_allowed_ips: str = "0.0.0.0/0, ::/0"
     default_client_dns: str | None = None
     client_name_key: str | None = None
+    allow_container_restart: bool = False
+    allow_system_reboot: bool = False
 
     # WARP/Xray settings removed
 
     data_dir: str = os.getenv("PANEL_DATA_DIR", "/data")
 
 
-def _load_secrets_file() -> dict[str, str]:
+def _load_secrets_file() -> dict[str, object]:
     path = os.getenv("PANEL_SECRETS_PATH")
     if not path:
         data_dir = os.getenv("PANEL_DATA_DIR", "/data")
@@ -41,7 +43,7 @@ def _load_secrets_file() -> dict[str, str]:
         return {}
     if not isinstance(data, dict):
         return {}
-    result: dict[str, str] = {}
+    result: dict[str, object] = {}
     mapping = {
         "SECRET_KEY": "secret_key",
         "ADMIN_USER": "admin_user",
@@ -55,6 +57,8 @@ def _load_secrets_file() -> dict[str, str]:
         "DEFAULT_CLIENT_ALLOWED_IPS": "default_client_allowed_ips",
         "DEFAULT_CLIENT_DNS": "default_client_dns",
         "CLIENT_NAME_KEY": "client_name_key",
+        "ALLOW_CONTAINER_RESTART": "allow_container_restart",
+        "ALLOW_SYSTEM_REBOOT": "allow_system_reboot",
         "secret_key": "secret_key",
         "admin_user": "admin_user",
         "admin_pass": "admin_pass",
@@ -67,17 +71,20 @@ def _load_secrets_file() -> dict[str, str]:
         "default_client_allowed_ips": "default_client_allowed_ips",
         "default_client_dns": "default_client_dns",
         "client_name_key": "client_name_key",
+        "allow_container_restart": "allow_container_restart",
+        "allow_system_reboot": "allow_system_reboot",
     }
     for key, value in data.items():
-        if key in mapping and value:
-            result[mapping[key]] = str(value)
+        if key not in mapping or value is None:
+            continue
+        result[mapping[key]] = value
     return result
 
 
 @lru_cache
 def get_settings() -> Settings:
     secrets = _load_secrets_file()
-    overrides: dict[str, str] = {}
+    overrides: dict[str, object] = {}
     for field, env_name in [
         ("secret_key", "SECRET_KEY"),
         ("admin_user", "ADMIN_USER"),
@@ -91,9 +98,11 @@ def get_settings() -> Settings:
         ("default_client_allowed_ips", "DEFAULT_CLIENT_ALLOWED_IPS"),
         ("default_client_dns", "DEFAULT_CLIENT_DNS"),
         ("client_name_key", "CLIENT_NAME_KEY"),
+        ("allow_container_restart", "ALLOW_CONTAINER_RESTART"),
+        ("allow_system_reboot", "ALLOW_SYSTEM_REBOOT"),
     ]:
         env_val = os.getenv(env_name)
-        if env_val:
+        if env_val is not None and env_val != "":
             overrides[field] = env_val
         elif field in secrets:
             overrides[field] = secrets[field]

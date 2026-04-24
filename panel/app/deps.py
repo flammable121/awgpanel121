@@ -6,6 +6,7 @@ from fastapi import Request, HTTPException, Header
 from .core import settings, with_base
 from .db import SessionLocal
 from .awg import AwgController
+from .security import verify_password as verify_admin_password
 
 
 def get_db():
@@ -29,7 +30,7 @@ def _to_bytes(value: object) -> bytes:
 
 
 def verify_password(candidate: str) -> bool:
-    return hmac.compare_digest(_to_bytes(candidate), _to_bytes(settings.admin_pass))
+    return verify_admin_password(candidate, settings.admin_pass)
 
 
 def require_login(request: Request) -> None:

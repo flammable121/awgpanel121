@@ -227,10 +227,12 @@ const onResetTraffic = () => {
     <div class="control-card">
       <div class="control-title">Управление сервером</div>
       <div class="control-actions">
-        <button class="btn ghost" type="button" @click="onRestartPanel">Перезапустить панель</button>
-        <button class="btn ghost" type="button" @click="onRestartAwg">Перезапустить AmneziaWG</button>
-        <button class="btn danger" type="button" @click="onRestartServer">Перезагрузить сервер</button>
+        <button v-if="system?.allow_container_restart" class="btn ghost" type="button" @click="onRestartPanel">Перезапустить панель</button>
+        <button v-if="system?.allow_container_restart" class="btn ghost" type="button" @click="onRestartAwg">Перезапустить AmneziaWG</button>
+        <button v-if="system?.allow_system_reboot" class="btn danger" type="button" @click="onRestartServer">Перезагрузить сервер</button>
       </div>
+      <div v-if="system && !system.allow_container_restart" class="muted">Перезапуск контейнеров отключен в настройках безопасности.</div>
+      <div v-if="system && !system.allow_system_reboot" class="muted">Перезагрузка сервера отключена в настройках безопасности.</div>
     </div>
 
     <ActionModal

@@ -149,6 +149,17 @@ def parse_expires_from_api(payload: dict[str, Any]) -> datetime | None:
     return parse_expires_from_form(expires_date, expires_time, "", tz_offset)
 
 
+def should_reactivate_peer(
+    previous_expires_at: datetime | None,
+    new_expires_at: datetime | None,
+    now: datetime | None = None,
+) -> bool:
+    current = now or utc_now()
+    if not previous_expires_at or previous_expires_at > current:
+        return False
+    return new_expires_at is None or new_expires_at > current
+
+
 def extract_ips(allowed_ips: str) -> list[str]:
     if not allowed_ips:
         return []

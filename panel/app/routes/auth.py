@@ -5,6 +5,8 @@ from fastapi.responses import RedirectResponse
 
 from ..core import templates, template_context, settings, with_base
 from ..deps import require_login, verify_password
+from ..security import hash_password, password_requires_upgrade
+from ..services.secrets import update_secrets_file
 
 router = APIRouter()
 
@@ -21,6 +23,13 @@ def login_action(
     password: str = Form(""),
 ):
     if username == settings.admin_user and verify_password(password):
+        if password_requires_upgrade(settings.admin_pass):
+            try:
+                hashed = hash_password(password)
+                update_secrets_file({"ADMIN_PASS": hashed})
+                settings.admin_pass = hashed
+            except Exception as exc:
+                print(f"[awgpanel] admin password hash upgrade failed: {exc}")
         request.session["user"] = username
         return RedirectResponse(with_base("/"), status_code=303)
     return templates.TemplateResponse(
