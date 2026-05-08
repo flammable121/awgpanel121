@@ -81,22 +81,181 @@ else
   exit 1
 fi
 
-read -r -p "AWG container name [amnezia-awg2]: " AWG_CONTAINER
-AWG_CONTAINER=${AWG_CONTAINER:-amnezia-awg2}
-read -r -p "AmneziaWG config path [/opt/amnezia/awg/awg0.conf]: " AWG_CONFIG_PATH
-AWG_CONFIG_PATH=${AWG_CONFIG_PATH:-/opt/amnezia/awg/awg0.conf}
-read -r -p "AmneziaWG interface [awg0]: " AWG_INTERFACE
-AWG_INTERFACE=${AWG_INTERFACE:-awg0}
+DEFAULT_AWG_CONTAINER="amnezia-awg2"
+DEFAULT_AWG_CONFIG_PATH="/opt/amnezia/awg/awg0.conf"
+DEFAULT_AWG_INTERFACE="awg0"
 
-check_awg() {
-  if docker ps -a --format '{{.Names}}' | grep -qx "$AWG_CONTAINER"; then
-    if docker exec "$AWG_CONTAINER" sh -c "test -f '$AWG_CONFIG_PATH'" >/dev/null 2>&1; then
+container_exists() {
+  [ -n "$1" ] && docker container inspect "$1" >/dev/null 2>&1
+}
+
+container_running() {
+  [ -n "$1" ] && [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" = "true" ]
+}
+
+container_has_awg_tools() {
+  container_running "$1" || return 1
+  docker exec "$1" sh -c 'command -v awg >/dev/null 2>&1 && command -v awg-quick >/dev/null 2>&1' >/dev/null 2>&1
+}
+
+is_awg_container_name() {
+  local name="${1,,}"
+  case "$name" in
+    *amneziawg*|*amnezia*awg*|*awg*amnezia*|*amnezia*wg*|*wg*amnezia*|*amnezia*wireguard*|*wireguard*amnezia*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+detect_awg_container() {
+  local name
+  if container_exists "$DEFAULT_AWG_CONTAINER" && container_running "$DEFAULT_AWG_CONTAINER"; then
+    echo "$DEFAULT_AWG_CONTAINER"
+    return 0
+  fi
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if is_awg_container_name "$name" && container_running "$name"; then
+      echo "$name"
       return 0
     fi
-    echo "AWG container found, but config path not accessible: $AWG_CONFIG_PATH"
+  done < <(docker ps -a --format '{{.Names}}' 2>/dev/null || true)
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if container_has_awg_tools "$name"; then
+      echo "$name"
+      return 0
+    fi
+  done < <(docker ps -a --format '{{.Names}}' 2>/dev/null || true)
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if is_awg_container_name "$name"; then
+      echo "$name"
+      return 0
+    fi
+  done < <(docker ps -a --format '{{.Names}}' 2>/dev/null || true)
+
+  if container_exists "$DEFAULT_AWG_CONTAINER"; then
+    echo "$DEFAULT_AWG_CONTAINER"
+    return 0
+  fi
+
+  return 1
+}
+
+detect_awg_config_path() {
+  local container="$1"
+  container_running "$container" || return 1
+  docker exec "$container" sh -c '
+for path in \
+  /opt/amnezia/awg/awg0.conf \
+  /opt/amnezia/amneziawg/awg0.conf \
+  /etc/amnezia/amneziawg/awg0.conf \
+  /etc/amnezia/amneziawg/wg0.conf \
+  /etc/wireguard/awg0.conf \
+  /etc/wireguard/wg0.conf \
+  /config/awg0.conf \
+  /config/wg0.conf
+do
+  [ -f "$path" ] && { echo "$path"; exit 0; }
+done
+
+for dir in /opt/amnezia /etc/amnezia /etc/wireguard /config; do
+  [ -d "$dir" ] || continue
+  find "$dir" -maxdepth 5 -type f -name "*.conf" 2>/dev/null
+done | while IFS= read -r path; do
+  if grep -Eq "^\[Interface\]" "$path" && grep -Eq "^[[:space:]]*ListenPort[[:space:]]*=" "$path"; then
+    echo "$path"
+    exit 0
+  fi
+done
+' 2>/dev/null | head -n 1
+}
+
+interface_from_config_path() {
+  local filename iface
+  filename="${1##*/}"
+  iface="${filename%.conf}"
+  if [ -n "$iface" ] && [ "$iface" != "$filename" ]; then
+    echo "$iface"
+    return 0
+  fi
+  echo "$DEFAULT_AWG_INTERFACE"
+}
+
+refresh_awg_detection() {
+  local detected_container detected_config detected_iface
+  detected_container=$(detect_awg_container || true)
+  if [ -n "$detected_container" ] && [ "$detected_container" != "$AWG_CONTAINER" ] && ! container_exists "$AWG_CONTAINER"; then
+    AWG_CONTAINER="$detected_container"
+    echo "Detected AWG container: $AWG_CONTAINER"
+  fi
+
+  if container_exists "$AWG_CONTAINER" && container_running "$AWG_CONTAINER"; then
+    detected_config=$(detect_awg_config_path "$AWG_CONTAINER" || true)
+    if [ -n "$detected_config" ] && [ "$detected_config" != "$AWG_CONFIG_PATH" ] && ! docker exec "$AWG_CONTAINER" test -f "$AWG_CONFIG_PATH" >/dev/null 2>&1; then
+      AWG_CONFIG_PATH="$detected_config"
+      detected_iface=$(interface_from_config_path "$AWG_CONFIG_PATH")
+      AWG_INTERFACE=${detected_iface:-$AWG_INTERFACE}
+      echo "Detected AWG config path: $AWG_CONFIG_PATH"
+      echo "Detected AWG interface: $AWG_INTERFACE"
+    fi
+  fi
+}
+
+DETECTED_AWG_CONTAINER=$(detect_awg_container || true)
+AWG_CONTAINER_DEFAULT=${DETECTED_AWG_CONTAINER:-$DEFAULT_AWG_CONTAINER}
+if [ -n "$DETECTED_AWG_CONTAINER" ]; then
+  echo "Detected AWG container: $DETECTED_AWG_CONTAINER"
+fi
+read -r -p "AWG container name [$AWG_CONTAINER_DEFAULT]: " AWG_CONTAINER
+AWG_CONTAINER=${AWG_CONTAINER:-$AWG_CONTAINER_DEFAULT}
+
+AWG_CONFIG_DEFAULT=""
+if container_exists "$AWG_CONTAINER" && container_running "$AWG_CONTAINER"; then
+  AWG_CONFIG_DEFAULT=$(detect_awg_config_path "$AWG_CONTAINER" || true)
+fi
+AWG_CONFIG_DEFAULT=${AWG_CONFIG_DEFAULT:-$DEFAULT_AWG_CONFIG_PATH}
+if [ "$AWG_CONFIG_DEFAULT" != "$DEFAULT_AWG_CONFIG_PATH" ]; then
+  echo "Detected AWG config path: $AWG_CONFIG_DEFAULT"
+fi
+read -r -p "AmneziaWG config path [$AWG_CONFIG_DEFAULT]: " AWG_CONFIG_PATH
+AWG_CONFIG_PATH=${AWG_CONFIG_PATH:-$AWG_CONFIG_DEFAULT}
+
+AWG_INTERFACE_DEFAULT=$(interface_from_config_path "$AWG_CONFIG_PATH")
+AWG_INTERFACE_DEFAULT=${AWG_INTERFACE_DEFAULT:-$DEFAULT_AWG_INTERFACE}
+read -r -p "AmneziaWG interface [$AWG_INTERFACE_DEFAULT]: " AWG_INTERFACE
+AWG_INTERFACE=${AWG_INTERFACE:-$AWG_INTERFACE_DEFAULT}
+
+check_awg() {
+  if ! container_exists "$AWG_CONTAINER"; then
+    echo "AWG container not found: $AWG_CONTAINER"
+    echo "Available Docker containers:"
+    docker ps -a --format '  - {{.Names}} ({{.Status}})' 2>/dev/null || true
     return 1
   fi
-  return 1
+  if ! container_running "$AWG_CONTAINER"; then
+    echo "AWG container exists, but is not running: $AWG_CONTAINER"
+    echo "Start it and retry: docker start $AWG_CONTAINER"
+    return 1
+  fi
+  if ! docker exec "$AWG_CONTAINER" test -f "$AWG_CONFIG_PATH" >/dev/null 2>&1; then
+    echo "AWG container found, but config path not accessible: $AWG_CONFIG_PATH"
+    local detected_config
+    detected_config=$(detect_awg_config_path "$AWG_CONTAINER" || true)
+    if [ -n "$detected_config" ] && [ "$detected_config" != "$AWG_CONFIG_PATH" ]; then
+      echo "Detected another config path: $detected_config"
+    fi
+    return 1
+  fi
+  if ! container_has_awg_tools "$AWG_CONTAINER"; then
+    echo "AWG tools were not found inside container: $AWG_CONTAINER"
+    echo "The panel requires a running AmneziaWG Docker container with awg and awg-quick."
+    return 1
+  fi
+  return 0
 }
 
 echo ""
@@ -105,6 +264,7 @@ if ! check_awg; then
   echo "AmneziaWG 2.0 was not detected or not ready."
   echo "Please install it using the official desktop app (AmneziaVPN), then press Enter."
   read -r -p "Press Enter to continue after installation..." _
+  refresh_awg_detection
   if ! check_awg; then
     echo "AmneziaWG was not found. Please verify the container name and config path."
     exit 1
