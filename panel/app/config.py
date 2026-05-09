@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     default_client_allowed_ips: str = "0.0.0.0/0, ::/0"
     default_client_dns: str | None = None
     client_name_key: str | None = None
-    allow_container_restart: bool = False
-    allow_system_reboot: bool = False
+    allow_container_restart: bool = True
+    allow_system_reboot: bool = True
 
     # WARP/Xray settings removed
 

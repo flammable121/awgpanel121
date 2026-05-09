@@ -9,14 +9,11 @@ const basePath = (window.__PANEL_BASE__ || "").replace(/\/+$/, "");
 const logoutUrl = basePath ? `${basePath}/logout` : "/logout";
 
 const tab = ref("dashboard");
-const theme = ref(localStorage.getItem("theme") || "dark");
 const navOpen = ref(false);
 
-const applyTheme = (value) => {
-  document.body.dataset.theme = value;
-  document.body.classList.toggle("theme-dark", value === "dark");
-  localStorage.setItem("theme", value);
-};
+document.body.dataset.theme = "dark";
+document.body.classList.add("theme-dark");
+localStorage.removeItem("theme");
 
 const setTab = (value) => {
   tab.value = value;
@@ -29,13 +26,6 @@ const initialTab = new URLSearchParams(window.location.search).get("tab");
 if (["dashboard", "clients", "awg", "api"].includes(initialTab)) {
   tab.value = initialTab;
 }
-
-applyTheme(theme.value);
-
-const toggleTheme = () => {
-  theme.value = theme.value === "dark" ? "light" : "dark";
-  applyTheme(theme.value);
-};
 
 const closeNav = () => {
   navOpen.value = false;
@@ -85,9 +75,6 @@ const closeNav = () => {
           </button>
         </nav>
         <div class="sidebar-footer">
-          <button class="side-link ghost" type="button" @click="toggleTheme">
-            {{ theme === "dark" ? "Темная тема" : "Светлая тема" }}
-          </button>
           <form method="post" :action="logoutUrl">
             <button class="side-link ghost" type="submit">Выход</button>
           </form>

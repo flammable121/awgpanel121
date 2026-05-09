@@ -71,9 +71,8 @@ bash -c "git clone https://github.com/flammable121/awgpanel121.git awgpanel && c
 - Генерируется **секретный путь** к панели (например: `/FKnnoR41OKNF23/`).
 - В конце установки выводится полный URL панели.
 - Генерируется **API токен** для доступа к внешнему API.
-- Перезапуск контейнеров из панели по умолчанию отключен (`ALLOW_CONTAINER_RESTART=false`).
-- Перезагрузка хоста из панели по умолчанию отключена (`ALLOW_SYSTEM_REBOOT=false`).
-- При необходимости можно вручную включить эти действия в `.secrets/panel.json`.
+- Перезапуск панели и AmneziaWG из панели включен (`ALLOW_CONTAINER_RESTART=true`).
+- Перезагрузка хоста из панели включена (`ALLOW_SYSTEM_REBOOT=true`).
 
 ## Пример URL доступа
 

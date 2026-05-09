@@ -1,20 +1,8 @@
 (() => {
   const body = document.body;
-  const themeToggle = document.getElementById("themeToggle");
-  const storedTheme = localStorage.getItem("theme");
-  const initialTheme = storedTheme || body.dataset.theme || "dark";
-  body.dataset.theme = initialTheme;
-  body.classList.toggle("theme-dark", initialTheme === "dark");
-  if (themeToggle) {
-    themeToggle.textContent = initialTheme === "dark" ? "Темная" : "Светлая";
-    themeToggle.addEventListener("click", () => {
-      const nextTheme = body.dataset.theme === "dark" ? "light" : "dark";
-      body.dataset.theme = nextTheme;
-      body.classList.toggle("theme-dark", nextTheme === "dark");
-      localStorage.setItem("theme", nextTheme);
-      themeToggle.textContent = nextTheme === "dark" ? "Темная" : "Светлая";
-    });
-  }
+  body.dataset.theme = "dark";
+  body.classList.add("theme-dark");
+  localStorage.removeItem("theme");
 
   const modal = document.getElementById("configModal");
   const modalClose = document.getElementById("modalClose");

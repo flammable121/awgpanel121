@@ -21,13 +21,20 @@ const modal = ref({
 const modalState = ref("confirm");
 let timer = null;
 
-const load = async () => {
+const applySystem = (data) => {
+  system.value = data;
+  error.value = "";
+};
+
+const load = async ({ force = false, quiet = false } = {}) => {
+  if (modalState.value === "loading" && !force) return;
   try {
     const data = await fetchSystem();
-    system.value = data;
-    error.value = "";
+    applySystem(data);
   } catch (err) {
-    error.value = "Не удалось загрузить данные системы";
+    if (!quiet) {
+      error.value = "Не удалось загрузить данные системы";
+    }
   }
 };
 
@@ -41,18 +48,47 @@ const waitForReboot = async (previousUptime) => {
     try {
       const data = await fetchSystem();
       const uptime = Number(data.uptime_seconds || 0);
+      if (!previousUptime && sawDisconnect) {
+        applySystem(data);
+        return;
+      }
       if (sawDisconnect && uptime >= 0 && uptime < previousUptime - 5) {
-        system.value = data;
+        applySystem(data);
         return;
       }
       if (uptime >= 0 && uptime < previousUptime - 30) {
-        system.value = data;
+        applySystem(data);
         return;
       }
     } catch (err) {
       sawDisconnect = true;
     }
     await sleep(3000);
+  }
+  throw new Error("timeout");
+};
+
+const waitForPanelRestart = async (previousStartedAt) => {
+  const startedAt = Date.now();
+  const timeoutMs = 2 * 60 * 1000;
+  let sawDisconnect = false;
+  await sleep(1200);
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const data = await fetchSystem();
+      const startedAtValue = Number(data.panel_started_at || 0);
+      if (previousStartedAt && startedAtValue && startedAtValue !== previousStartedAt) {
+        applySystem(data);
+        return;
+      }
+      if (!previousStartedAt && sawDisconnect) {
+        applySystem(data);
+        return;
+      }
+    } catch (err) {
+      sawDisconnect = true;
+    }
+    await sleep(1500);
   }
   throw new Error("timeout");
 };
@@ -146,7 +182,13 @@ const onRestartPanel = () => {
     successText: "Панель управления успешно перезапущена",
     errorText: "Не удалось перезапустить панель",
     action: async () => {
-      await restartPanel();
+      const previousStartedAt = Number(system.value?.panel_started_at || 0);
+      try {
+        await restartPanel();
+      } catch (err) {
+        if (!previousStartedAt) throw err;
+      }
+      await waitForPanelRestart(previousStartedAt);
     },
   });
 };
@@ -161,7 +203,7 @@ const onRestartAwg = () => {
     errorText: "Не удалось перезапустить AmneziaWG",
     action: async () => {
       await restartAwg();
-      await load();
+      await load({ force: true });
     },
   });
 };
@@ -192,7 +234,7 @@ const onResetTraffic = () => {
     errorText: "Не удалось сбросить трафик",
     action: async () => {
       await resetTraffic();
-      await load();
+      await load({ force: true });
     },
   });
 };
@@ -227,12 +269,10 @@ const onResetTraffic = () => {
     <div class="control-card">
       <div class="control-title">Управление сервером</div>
       <div class="control-actions">
-        <button v-if="system?.allow_container_restart" class="btn ghost" type="button" @click="onRestartPanel">Перезапустить панель</button>
-        <button v-if="system?.allow_container_restart" class="btn ghost" type="button" @click="onRestartAwg">Перезапустить AmneziaWG</button>
-        <button v-if="system?.allow_system_reboot" class="btn danger" type="button" @click="onRestartServer">Перезагрузить сервер</button>
+        <button class="btn ghost" type="button" @click="onRestartPanel">Перезапустить панель</button>
+        <button class="btn ghost" type="button" @click="onRestartAwg">Перезапустить AmneziaWG</button>
+        <button class="btn danger" type="button" @click="onRestartServer">Перезагрузить сервер</button>
       </div>
-      <div v-if="system && !system.allow_container_restart" class="muted">Перезапуск контейнеров отключен в настройках безопасности.</div>
-      <div v-if="system && !system.allow_system_reboot" class="muted">Перезагрузка сервера отключена в настройках безопасности.</div>
     </div>
 
     <ActionModal

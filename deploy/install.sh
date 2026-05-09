@@ -98,6 +98,52 @@ container_has_awg_tools() {
   docker exec "$1" sh -c 'command -v awg >/dev/null 2>&1 && command -v awg-quick >/dev/null 2>&1' >/dev/null 2>&1
 }
 
+docker_has_containers() {
+  [ -n "$(docker ps -a -q 2>/dev/null || true)" ]
+}
+
+detect_host_awg_config_path() {
+  local path
+  for path in \
+    /opt/amnezia/awg/awg0.conf \
+    /opt/amnezia/amneziawg/awg0.conf \
+    /etc/amnezia/amneziawg/awg0.conf \
+    /etc/amnezia/amneziawg/wg0.conf \
+    /etc/wireguard/awg0.conf \
+    /etc/wireguard/wg0.conf
+  do
+    [ -f "$path" ] && { echo "$path"; return 0; }
+  done
+  return 1
+}
+
+host_has_awg_install() {
+  command -v awg >/dev/null 2>&1 || command -v awg-quick >/dev/null 2>&1 || [ -n "$(detect_host_awg_config_path || true)" ]
+}
+
+print_awg_container_help() {
+  if docker_has_containers; then
+    echo "Available Docker containers:"
+    docker ps -a --format '  - {{.Names}} ({{.Status}})' 2>/dev/null || true
+  else
+    echo "Docker is running, but it has no containers."
+  fi
+
+  if host_has_awg_install; then
+    echo ""
+    echo "Host AmneziaWG/WireGuard files or tools were detected, but no AWG Docker container was found."
+    local host_config
+    host_config=$(detect_host_awg_config_path || true)
+    if [ -n "$host_config" ]; then
+      echo "Detected host config: $host_config"
+    fi
+    echo "This panel build controls AmneziaWG through Docker, so docker ps -a must show the AWG container."
+  else
+    echo ""
+    echo "No host AmneziaWG tools or typical config files were detected either."
+  fi
+}
+
 is_awg_container_name() {
   local name="${1,,}"
   case "$name" in
@@ -232,8 +278,7 @@ AWG_INTERFACE=${AWG_INTERFACE:-$AWG_INTERFACE_DEFAULT}
 check_awg() {
   if ! container_exists "$AWG_CONTAINER"; then
     echo "AWG container not found: $AWG_CONTAINER"
-    echo "Available Docker containers:"
-    docker ps -a --format '  - {{.Names}} ({{.Status}})' 2>/dev/null || true
+    print_awg_container_help
     return 1
   fi
   if ! container_running "$AWG_CONTAINER"; then
@@ -405,8 +450,8 @@ data = {
     "PUBLIC_ENDPOINT": os.environ.get("PUBLIC_ENDPOINT", ""),
     "DEFAULT_CLIENT_ALLOWED_IPS": os.environ.get("DEFAULT_CLIENT_ALLOWED_IPS", "0.0.0.0/0, ::/0"),
     "DEFAULT_CLIENT_DNS": os.environ.get("DEFAULT_CLIENT_DNS", "1.1.1.1, 8.8.8.8"),
-    "ALLOW_CONTAINER_RESTART": False,
-    "ALLOW_SYSTEM_REBOOT": False,
+    "ALLOW_CONTAINER_RESTART": True,
+    "ALLOW_SYSTEM_REBOOT": True,
 }
 with open(path, "w", encoding="utf-8") as fh:
     json.dump(data, fh, ensure_ascii=False, indent=2)
@@ -425,8 +470,8 @@ else
   "PUBLIC_ENDPOINT": "$PUBLIC_ENDPOINT",
   "DEFAULT_CLIENT_ALLOWED_IPS": "$DEFAULT_CLIENT_ALLOWED_IPS",
   "DEFAULT_CLIENT_DNS": "$DEFAULT_CLIENT_DNS",
-  "ALLOW_CONTAINER_RESTART": false,
-  "ALLOW_SYSTEM_REBOOT": false
+  "ALLOW_CONTAINER_RESTART": true,
+  "ALLOW_SYSTEM_REBOOT": true
 }
 ENV
 fi
