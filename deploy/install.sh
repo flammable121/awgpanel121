@@ -13,7 +13,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-install_docker() {
+setup_docker_apt_repo() {
   if ! command -v apt-get >/dev/null 2>&1; then
     echo "Docker auto-install is only supported on Debian/Ubuntu (apt)."
     return 1
@@ -25,19 +25,31 @@ install_docker() {
     return 1
   fi
 
-  echo "Installing Docker for $ID ($VERSION_CODENAME)..."
   apt-get update
   apt-get install -y ca-certificates curl gnupg
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL "https://download.docker.com/linux/$ID/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  curl -fsSL "https://download.docker.com/linux/$ID/gpg" | gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
   chmod a+r /etc/apt/keyrings/docker.gpg
 
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$ID $VERSION_CODENAME stable" \
     | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
   apt-get update
+}
+
+install_docker() {
+  . /etc/os-release
+  echo "Installing Docker for $ID ($VERSION_CODENAME)..."
+  setup_docker_apt_repo
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   systemctl enable --now docker || service docker start || true
+}
+
+install_compose() {
+  . /etc/os-release
+  echo "Installing Docker Compose plugin for $ID ($VERSION_CODENAME)..."
+  setup_docker_apt_repo
+  apt-get install -y docker-compose-plugin
 }
 
 hash_password_pbkdf2() {
@@ -72,12 +84,18 @@ if ! command -v docker >/dev/null 2>&1; then
   esac
 fi
 
+if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+  echo "Docker is installed, but Docker Compose is not available."
+  install_compose || true
+fi
+
 if docker compose version >/dev/null 2>&1; then
   DC="docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then
   DC="docker-compose"
 else
-  echo "Docker Compose is not available. Install docker compose v2 or docker-compose and retry."
+  echo "Docker Compose is not available. Install it and retry:"
+  echo "  apt-get update && apt-get install -y docker-compose-plugin"
   exit 1
 fi
 
