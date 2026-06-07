@@ -116,6 +116,51 @@ export function fetchAwgSettings() {
   return apiGet("/api/awg/settings");
 }
 
+export function fetchAwgRouting() {
+  return apiGet("/api/awg/routing");
+}
+
+export async function updateAwgRouting(payload) {
+  const response = await fetch(withBase("/api/awg/routing"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "fetch",
+    },
+    body: JSON.stringify(payload || {}),
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    let detail = "Не удалось сохранить маршрутизацию";
+    try {
+      const data = await response.json();
+      if (data && data.detail) detail = data.detail;
+    } catch (err) {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+  return response.json();
+}
+
+export function updateAwgRoutingGeoip(payload) {
+  return apiPost("/api/awg/routing/geoip/update", {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "fetch",
+    },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export function applyAwgRouting() {
+  return apiPost("/api/awg/routing/apply");
+}
+
+export function clearAwgRouting() {
+  return apiPost("/api/awg/routing/clear");
+}
+
 export async function updateAwgSettings(payload) {
   const response = await fetch(withBase("/api/awg/settings"), {
     method: "POST",

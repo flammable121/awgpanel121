@@ -11,6 +11,13 @@ from ..services.awg_service import (
 from ..utils import generate_i_chain
 from ..core import settings
 from ..services.secrets import update_secrets_file
+from ..services.routing import (
+    apply_geoip_block,
+    clear_geoip_block,
+    routing_status,
+    save_routing_config,
+    update_geoip_database,
+)
 from ..db import SessionLocal
 
 router = APIRouter()
@@ -105,3 +112,74 @@ async def api_awg_settings_update(request: Request):
         "default_client_allowed_ips": settings.default_client_allowed_ips,
         "default_client_dns": settings.default_client_dns or "",
     }
+
+
+@router.get("/api/awg/routing")
+def api_awg_routing(request: Request):
+    require_login(request)
+    return routing_status()
+
+
+@router.post("/api/awg/routing")
+async def api_awg_routing_update(request: Request):
+    require_login(request)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    updates = {}
+    if "enabled" in payload:
+        updates["enabled"] = bool(payload.get("enabled"))
+    if "geoip_tags" in payload:
+        tags = payload.get("geoip_tags")
+        if isinstance(tags, str):
+            tags = [item.strip() for item in tags.replace("\n", ",").split(",")]
+        if not isinstance(tags, list):
+            raise HTTPException(status_code=400, detail="geoip_tags must be a list")
+        updates["geoip_tags"] = tags
+    if "geoip_url" in payload:
+        updates["geoip_url"] = str(payload.get("geoip_url") or "").strip()
+
+    save_routing_config(updates)
+    return {"ok": True, **routing_status()}
+
+
+@router.post("/api/awg/routing/geoip/update")
+async def api_awg_routing_geoip_update(request: Request):
+    require_login(request)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    try:
+        update_geoip_database(str(payload.get("geoip_url") or "").strip() or None)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"ok": True, **routing_status()}
+
+
+@router.post("/api/awg/routing/apply")
+def api_awg_routing_apply(request: Request):
+    require_login(request)
+    try:
+        result = apply_geoip_block()
+    except Exception as exc:
+        save_routing_config({"last_error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {**result, **routing_status()}
+
+
+@router.post("/api/awg/routing/clear")
+def api_awg_routing_clear(request: Request):
+    require_login(request)
+    try:
+        result = clear_geoip_block()
+    except Exception as exc:
+        save_routing_config({"last_error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {**result, **routing_status()}

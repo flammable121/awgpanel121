@@ -227,7 +227,8 @@ label span {
   margin-bottom: 6px;
 }
 
-input {
+input,
+textarea {
   width: 100%;
   padding: 10px 12px;
   border-radius: 12px;
@@ -235,6 +236,12 @@ input {
   font-size: 14px;
   background: rgba(12, 17, 24, 0.6);
   color: var(--ink);
+}
+
+textarea {
+  min-height: 82px;
+  resize: vertical;
+  font-family: inherit;
 }
 
 select {
@@ -253,11 +260,13 @@ select {
   background-repeat: no-repeat;
 }
 
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: var(--muted);
 }
 
-input:focus {
+input:focus,
+textarea:focus {
   outline: 2px solid rgba(18, 179, 138, 0.25);
   border-color: var(--accent);
 }
@@ -804,6 +813,60 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   gap: 16px;
   margin-top: 16px;
   flex-wrap: wrap;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.check-row span {
+  margin: 0;
+  color: var(--ink);
+}
+
+.route-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.route-meta span {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tag-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  max-height: 132px;
+  overflow: auto;
+}
+
+.tag-button {
+  border: 1px solid rgba(18, 179, 138, 0.35);
+  background: rgba(18, 179, 138, 0.12);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tag-button:hover {
+  border-color: rgba(18, 179, 138, 0.75);
 }
 
 .awg-divider {
