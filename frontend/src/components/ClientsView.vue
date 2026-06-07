@@ -20,6 +20,26 @@ const deletePeerTarget = ref(null);
 const deleteBusy = ref(false);
 let statsTimer = null;
 const lastStats = new Map();
+const collator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
+const normalizeSearch = (value) => String(value ?? "").trim().toLowerCase();
+
+const searchFieldsFor = (peer, needle) => {
+  const fields = [
+    peer.name,
+    peer.note,
+    peer.status_label,
+    peer.expires_display,
+    peer.client_dns,
+  ];
+  if (/[.:/,]/.test(needle)) {
+    fields.push(peer.allowed_ips, peer.client_allowed_ips, peer.public_key);
+  }
+  return fields.map(normalizeSearch).filter(Boolean);
+};
 
 const loadPeers = async () => {
   try {
@@ -47,10 +67,14 @@ const loadPeers = async () => {
 };
 
 const filteredPeers = computed(() => {
-  const needle = filter.value.trim().toLowerCase();
+  const needle = normalizeSearch(filter.value);
+  const tokens = needle.split(/\s+/).filter(Boolean);
   return peers.value.filter((peer) => {
-    const hay = `${peer.name} ${peer.allowed_ips} ${peer.client_allowed_ips || ""} ${peer.client_dns || ""} ${peer.note || ""} ${peer.status_label}`.toLowerCase();
-    return !needle || hay.includes(needle);
+    if (!tokens.length) {
+      return true;
+    }
+    const fields = searchFieldsFor(peer, needle);
+    return tokens.every((token) => fields.some((field) => field.includes(token)));
   });
 });
 
@@ -75,8 +99,9 @@ const sortedPeers = computed(() => {
       bVal = Number(b.traffic_total || 0);
     }
     if (typeof aVal === "string") {
-      aVal = aVal.toLowerCase();
-      bVal = bVal.toLowerCase();
+      const result = collator.compare(aVal, String(bVal ?? ""));
+      if (result !== 0) return result * dir;
+      return collator.compare(a.id || "", b.id || "") * dir;
     }
     if (aVal < bVal) return -1 * dir;
     if (aVal > bVal) return 1 * dir;
