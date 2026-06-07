@@ -36,6 +36,7 @@ def _default_config() -> dict[str, Any]:
         "dns_block_enabled": False,
         "dns_redirect_enabled": True,
         "dns_upstreams": [],
+        "bypass_dns_upstreams": ["1.1.1.1", "8.8.8.8"],
         "geosite_tags": [],
         "geosite_url": DEFAULT_GEOSITE_URL,
         "manual_domains": [],
@@ -69,6 +70,12 @@ def load_routing_config() -> dict[str, Any]:
     if not isinstance(upstreams, list):
         upstreams = []
     config["dns_upstreams"] = normalize_dns_upstreams(upstreams)
+    bypass_upstreams = config.get("bypass_dns_upstreams", [])
+    if isinstance(bypass_upstreams, str):
+        bypass_upstreams = [item.strip() for item in bypass_upstreams.replace("\n", ",").split(",")]
+    if not isinstance(bypass_upstreams, list):
+        bypass_upstreams = []
+    config["bypass_dns_upstreams"] = normalize_dns_upstreams(bypass_upstreams) or ["1.1.1.1", "8.8.8.8"]
     geosite_tags = config.get("geosite_tags", [])
     if isinstance(geosite_tags, str):
         geosite_tags = [item.strip() for item in geosite_tags.replace("\n", ",").split(",")]
@@ -114,6 +121,11 @@ def save_routing_config(updates: dict[str, Any]) -> dict[str, Any]:
         if isinstance(upstreams, str):
             upstreams = [item.strip() for item in upstreams.replace("\n", ",").split(",")]
         config["dns_upstreams"] = normalize_dns_upstreams(upstreams)
+    if "bypass_dns_upstreams" in config:
+        upstreams = config["bypass_dns_upstreams"]
+        if isinstance(upstreams, str):
+            upstreams = [item.strip() for item in upstreams.replace("\n", ",").split(",")]
+        config["bypass_dns_upstreams"] = normalize_dns_upstreams(upstreams) or ["1.1.1.1", "8.8.8.8"]
     if "geosite_tags" in config:
         tags = config["geosite_tags"]
         if isinstance(tags, str):
@@ -394,8 +406,14 @@ def _remove_dns_container(client) -> None:
         pass
 
 
-def build_dnsmasq_config(domains: list[str], upstreams: list[str], bypass_domains: list[str]) -> str:
+def build_dnsmasq_config(
+    domains: list[str],
+    upstreams: list[str],
+    bypass_domains: list[str],
+    bypass_upstreams: list[str] | None = None,
+) -> str:
     servers = upstreams or normalize_dns_upstreams([settings.default_client_dns or ""]) or ["1.1.1.1", "8.8.8.8"]
+    bypass_servers = bypass_upstreams or ["1.1.1.1", "8.8.8.8"]
     lines = [
         f"port={DNS_REDIRECT_PORT}",
         "no-resolv",
@@ -406,7 +424,7 @@ def build_dnsmasq_config(domains: list[str], upstreams: list[str], bypass_domain
     for server in servers:
         lines.append(f"server={server}")
     for domain in bypass_domains:
-        for server in servers:
+        for server in bypass_servers:
             lines.append(f"server=/{domain}/{server}")
     for domain in domains:
         lines.append(f"address=/{domain}/0.0.0.0")
@@ -432,10 +450,15 @@ def _dns_bypass_domains(config: dict[str, Any]) -> list[str]:
     return normalize_domains(list(domains))
 
 
-def start_dns_block(domains: list[str], upstreams: list[str], bypass_domains: list[str]) -> None:
+def start_dns_block(
+    domains: list[str],
+    upstreams: list[str],
+    bypass_domains: list[str],
+    bypass_upstreams: list[str],
+) -> None:
     os.makedirs(ROUTING_DIR, exist_ok=True)
     with open(DNSMASQ_CONF_PATH, "w", encoding="utf-8") as fh:
-        fh.write(build_dnsmasq_config(domains, upstreams, bypass_domains))
+        fh.write(build_dnsmasq_config(domains, upstreams, bypass_domains, bypass_upstreams))
 
     client = docker.from_env()
     image_id, data_mount = _panel_image_and_data_mount()
@@ -488,7 +511,7 @@ def apply_geoip_block() -> dict[str, Any]:
             raise RuntimeError("DNS Block is enabled, but no domains are selected")
         bypass_domains = set(_dns_bypass_domains(config))
         dns_domains = [domain for domain in dns_domains if not domain_is_bypassed(domain, bypass_domains)]
-        start_dns_block(dns_domains, config["dns_upstreams"], sorted(bypass_domains))
+        start_dns_block(dns_domains, config["dns_upstreams"], sorted(bypass_domains), config["bypass_dns_upstreams"])
     else:
         stop_dns_block()
 

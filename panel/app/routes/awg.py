@@ -155,6 +155,13 @@ async def api_awg_routing_update(request: Request):
         if not isinstance(upstreams, list):
             raise HTTPException(status_code=400, detail="dns_upstreams must be a list")
         updates["dns_upstreams"] = upstreams
+    if "bypass_dns_upstreams" in payload:
+        upstreams = payload.get("bypass_dns_upstreams")
+        if isinstance(upstreams, str):
+            upstreams = [item.strip() for item in upstreams.replace("\n", ",").split(",")]
+        if not isinstance(upstreams, list):
+            raise HTTPException(status_code=400, detail="bypass_dns_upstreams must be a list")
+        updates["bypass_dns_upstreams"] = upstreams
     if "geosite_tags" in payload:
         tags = payload.get("geosite_tags")
         if isinstance(tags, str):

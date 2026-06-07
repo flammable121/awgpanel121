@@ -51,6 +51,7 @@ const form = ref({
   dns_block_enabled: false,
   dns_redirect_enabled: true,
   dns_upstreams: [],
+  bypass_dns_upstreams: [],
   geoip_url: "",
   geoip_tags: [],
   geosite_url: "",
@@ -109,6 +110,11 @@ const fields = {
     domains: false,
     min: 1,
   },
+  bypass_dns_upstreams: {
+    suggestions: () => ["1.1.1.1", "8.8.8.8", "9.9.9.9", "8.8.4.4", "1.0.0.1"],
+    domains: false,
+    min: 1,
+  },
 };
 
 const suggestions = computed(() => {
@@ -145,6 +151,7 @@ const applyPayload = (data) => {
     dns_block_enabled: !!config.dns_block_enabled,
     dns_redirect_enabled: config.dns_redirect_enabled !== false,
     dns_upstreams: uniqueList(config.dns_upstreams || []),
+    bypass_dns_upstreams: uniqueList(config.bypass_dns_upstreams || ["1.1.1.1", "8.8.8.8"]),
     geoip_url: config.geoip_url || "",
     geoip_tags: uniqueList(config.geoip_tags || []),
     geosite_url: config.geosite_url || "",
@@ -329,6 +336,19 @@ onMounted(load);
           <input type="text" :placeholder="form.dns_upstreams.length ? '' : '111.88.96.50'" @input="onChipInput('dns_upstreams', $event)" @keydown="onKeydown('dns_upstreams', $event)" @blur="commitInput('dns_upstreams', $event)" />
           <div v-if="activeInput.field === 'dns_upstreams' && suggestions.length" class="autocomplete-list chip-suggestions">
             <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('dns_upstreams', item, $event)">{{ item }}</button>
+          </div>
+        </div>
+      </label>
+
+      <label>
+        <span>Upstream DNS для исключений</span>
+        <div class="chip-input">
+          <span v-for="item in form.bypass_dns_upstreams" :key="item" class="chip">
+            {{ item }} <button type="button" @click="removeItem('bypass_dns_upstreams', item)">×</button>
+          </span>
+          <input type="text" :placeholder="form.bypass_dns_upstreams.length ? '' : '1.1.1.1'" @input="onChipInput('bypass_dns_upstreams', $event)" @keydown="onKeydown('bypass_dns_upstreams', $event)" @blur="commitInput('bypass_dns_upstreams', $event)" />
+          <div v-if="activeInput.field === 'bypass_dns_upstreams' && suggestions.length" class="autocomplete-list chip-suggestions">
+            <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('bypass_dns_upstreams', item, $event)">{{ item }}</button>
           </div>
         </div>
       </label>
