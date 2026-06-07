@@ -29,20 +29,27 @@ const normalizeSearch = (value) => String(value ?? "").trim().toLowerCase();
 
 const nameSortParts = (value) => {
   const text = String(value ?? "").trim().toLowerCase();
+  if (/^\d+$/.test(text)) {
+    return { prefix: "", number: Number(text), suffix: "", numericOnly: true };
+  }
   const match = text.match(/^(\D*)(\d+)(.*)$/);
   if (!match) {
-    return { prefix: text, number: null, suffix: "" };
+    return { prefix: text, number: null, suffix: "", numericOnly: false };
   }
   return {
     prefix: match[1],
     number: Number(match[2]),
     suffix: match[3],
+    numericOnly: false,
   };
 };
 
 const comparePeerNames = (a, b) => {
   const aParts = nameSortParts(a.name);
   const bParts = nameSortParts(b.name);
+  if (aParts.numericOnly !== bParts.numericOnly) {
+    return aParts.numericOnly ? -1 : 1;
+  }
   const prefixCompare = collator.compare(aParts.prefix, bParts.prefix);
   if (prefixCompare !== 0) {
     return prefixCompare;
