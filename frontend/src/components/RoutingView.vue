@@ -116,7 +116,11 @@ const suggestions = computed(() => {
   const query = activeInput.value.query;
   const config = fields[field];
   if (!config || query.length < config.min) return [];
-  const existing = new Set(form.value[field]);
+  const existing = new Set(
+    field === "bypass_domains"
+      ? [...form.value.bypass_domains, ...form.value.bypass_geosite_tags]
+      : form.value[field]
+  );
   return Array.from(new Set(config.suggestions().map(normalize)))
     .filter((item) => item && item.includes(query) && !existing.has(item))
     .sort((a, b) => {
@@ -374,7 +378,10 @@ onMounted(load);
           <span v-for="item in form.bypass_domains" :key="item" class="chip">
             {{ item }} <button type="button" @click="removeItem('bypass_domains', item)">×</button>
           </span>
-          <input type="text" :placeholder="form.bypass_domains.length ? '' : 'gemini.google.com'" @input="onChipInput('bypass_domains', $event)" @keydown="onKeydown('bypass_domains', $event)" @blur="commitInput('bypass_domains', $event)" />
+          <span v-for="item in form.bypass_geosite_tags" :key="item" class="chip">
+            {{ item }} <button type="button" @click="removeItem('bypass_geosite_tags', item)">×</button>
+          </span>
+          <input type="text" :placeholder="form.bypass_domains.length || form.bypass_geosite_tags.length ? '' : 'gemini.google.com или google-gemini'" @input="onChipInput('bypass_domains', $event)" @keydown="onKeydown('bypass_domains', $event)" @blur="commitInput('bypass_domains', $event)" />
           <div v-if="activeInput.field === 'bypass_domains' && suggestions.length" class="autocomplete-list chip-suggestions">
             <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('bypass_domains', item, $event)">{{ item }}</button>
           </div>
