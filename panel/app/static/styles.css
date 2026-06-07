@@ -815,6 +815,10 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   flex-wrap: wrap;
 }
 
+.awg-actions .push-right {
+  margin-left: auto;
+}
+
 .check-row {
   display: flex;
   align-items: center;
@@ -933,6 +937,20 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 12px;
+}
+
+.route-section-title {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.route-switches + .route-section-title {
+  margin-top: 14px;
 }
 
 .route-resource-grid {

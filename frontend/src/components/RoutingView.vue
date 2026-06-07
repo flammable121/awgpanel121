@@ -28,8 +28,8 @@ const form = ref({
   block_bypass_domains: [],
   block_bypass_geosite_tags: [],
 });
-const geoip = ref({ exists: false, tags: [], mtime: null });
-const geosite = ref({ exists: false, tags: [], mtime: null });
+const geoip = ref({ exists: false, size: 0, tags: [], mtime: null });
+const geosite = ref({ exists: false, size: 0, tags: [], mtime: null });
 const loading = ref(false);
 const saving = ref(false);
 const updatingGeoip = ref(false);
@@ -43,6 +43,19 @@ const resetModalState = ref("confirm");
 const normalize = (value) => String(value || "").trim().toLowerCase().replace(/^\*\./, "").replace(/\.$/, "");
 const uniqueList = (items, domains = false) =>
   Array.from(new Set((items || []).map(normalize).filter((item) => item && (!domains || item.includes(".")))));
+
+const formatBytes = (value) => {
+  const size = Number(value || 0);
+  if (!size) return "—";
+  const units = ["B", "KB", "MB", "GB"];
+  let amount = size;
+  let index = 0;
+  while (amount >= 1024 && index < units.length - 1) {
+    amount /= 1024;
+    index += 1;
+  }
+  return `${amount.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+};
 
 const formatDate = (value) => {
   if (!value) return "—";
@@ -147,11 +160,13 @@ const applyPayload = (data) => {
   };
   geoip.value = {
     exists: !!data?.geoip?.exists,
+    size: data?.geoip?.size || 0,
     tags: data?.geoip?.tags || [],
     mtime: data?.geoip?.mtime || null,
   };
   geosite.value = {
     exists: !!data?.geosite?.exists,
+    size: data?.geosite?.size || 0,
     tags: data?.geosite?.tags || [],
     mtime: data?.geosite?.mtime || null,
   };
@@ -209,6 +224,11 @@ const updateGeosite = async () => {
   } finally {
     updatingGeosite.value = false;
   }
+};
+
+const updateGeoResources = async () => {
+  await updateGeoip();
+  await updateGeosite();
 };
 
 const applyRouting = async () => {
@@ -328,6 +348,7 @@ onMounted(load);
       </div>
     </div>
 
+    <div class="route-section-title">Источники GEO-ресурсов</div>
     <div class="route-url-grid">
       <label>
         <span>GEOIP URL</span>
@@ -340,6 +361,7 @@ onMounted(load);
     </div>
 
     <div class="form">
+      <div class="route-section-title">DNS</div>
       <label>
         <span>Upstream DNS для DNS Block</span>
         <div class="chip-input">
@@ -366,6 +388,7 @@ onMounted(load);
         </div>
       </label>
 
+      <div class="route-section-title">Правила блокировки</div>
       <label>
         <span>Блокируемые GEOIP теги</span>
         <div class="chip-input">
@@ -392,6 +415,7 @@ onMounted(load);
         </div>
       </label>
 
+      <div class="route-section-title">Домены DNS Block</div>
       <label>
         <span>Домены вручную</span>
         <div class="chip-input">
@@ -405,6 +429,7 @@ onMounted(load);
         </div>
       </label>
 
+      <div class="route-section-title">Исключения</div>
       <label>
         <span>Исключения BLOCK</span>
         <div class="chip-input">
@@ -423,27 +448,28 @@ onMounted(load);
 
     </div>
 
+    <div class="route-section-title">Состояние GEO-ресурсов</div>
     <div class="route-resource-grid">
       <div class="route-resource">
         <div class="route-resource-title">GEOIP</div>
         <div><span>Статус:</span> {{ geoip.exists ? "загружен" : "не загружен" }}</div>
+        <div><span>Размер:</span> {{ formatBytes(geoip.size) }}</div>
         <div><span>Обновлен:</span> {{ formatDate(geoip.mtime) }}</div>
         <div><span>Тегов:</span> {{ geoip.tags.length }}</div>
       </div>
       <div class="route-resource">
         <div class="route-resource-title">GEOSITE</div>
         <div><span>Статус:</span> {{ geosite.exists ? "загружен" : "не загружен" }}</div>
+        <div><span>Размер:</span> {{ formatBytes(geosite.size) }}</div>
         <div><span>Обновлен:</span> {{ formatDate(geosite.mtime) }}</div>
         <div><span>Тегов:</span> {{ geosite.tags.length }}</div>
       </div>
     </div>
 
     <div class="awg-actions">
-      <button class="btn ghost" type="button" :disabled="updatingGeoip" @click="updateGeoip">{{ updatingGeoip ? "Обновление..." : "Обновить GEOIP" }}</button>
-      <button class="btn ghost" type="button" :disabled="updatingGeosite" @click="updateGeosite">{{ updatingGeosite ? "Обновление..." : "Обновить GEOSITE" }}</button>
-      <button class="btn ghost" type="button" :disabled="saving" @click="save">{{ saving ? "Сохранение..." : "Сохранить" }}</button>
-      <button class="btn danger" type="button" :disabled="saving || applying || loading" @click="openResetModal">Сбросить настройки</button>
+      <button class="btn ghost" type="button" :disabled="updatingGeoip || updatingGeosite" @click="updateGeoResources">{{ updatingGeoip || updatingGeosite ? "Обновление..." : "Обновить GEOIP/GEOSITE" }}</button>
       <button class="btn primary" type="button" :disabled="applying || loading" @click="applyRouting">{{ applying ? "Применение..." : "Применить" }}</button>
+      <button class="btn danger push-right" type="button" :disabled="saving || applying || loading" @click="openResetModal">Сбросить настройки</button>
       <div v-if="message" class="muted">{{ message }}</div>
     </div>
   </section>
