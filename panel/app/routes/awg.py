@@ -147,6 +147,13 @@ async def api_awg_routing_update(request: Request):
         updates["dns_block_enabled"] = bool(payload.get("dns_block_enabled"))
     if "dns_redirect_enabled" in payload:
         updates["dns_redirect_enabled"] = bool(payload.get("dns_redirect_enabled"))
+    if "dns_upstreams" in payload:
+        upstreams = payload.get("dns_upstreams")
+        if isinstance(upstreams, str):
+            upstreams = [item.strip() for item in upstreams.replace("\n", ",").split(",")]
+        if not isinstance(upstreams, list):
+            raise HTTPException(status_code=400, detail="dns_upstreams must be a list")
+        updates["dns_upstreams"] = upstreams
     if "geosite_tags" in payload:
         tags = payload.get("geosite_tags")
         if isinstance(tags, str):

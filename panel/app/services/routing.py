@@ -35,6 +35,7 @@ def _default_config() -> dict[str, Any]:
         "geoip_url": DEFAULT_GEOIP_URL,
         "dns_block_enabled": False,
         "dns_redirect_enabled": True,
+        "dns_upstreams": [],
         "geosite_tags": [],
         "geosite_url": DEFAULT_GEOSITE_URL,
         "manual_domains": [],
@@ -60,6 +61,12 @@ def load_routing_config() -> dict[str, Any]:
     config["geoip_url"] = str(config.get("geoip_url") or DEFAULT_GEOIP_URL).strip() or DEFAULT_GEOIP_URL
     config["dns_block_enabled"] = bool(config.get("dns_block_enabled"))
     config["dns_redirect_enabled"] = bool(config.get("dns_redirect_enabled", True))
+    upstreams = config.get("dns_upstreams", [])
+    if isinstance(upstreams, str):
+        upstreams = [item.strip() for item in upstreams.replace("\n", ",").split(",")]
+    if not isinstance(upstreams, list):
+        upstreams = []
+    config["dns_upstreams"] = normalize_dns_upstreams(upstreams)
     geosite_tags = config.get("geosite_tags", [])
     if isinstance(geosite_tags, str):
         geosite_tags = [item.strip() for item in geosite_tags.replace("\n", ",").split(",")]
@@ -88,6 +95,11 @@ def save_routing_config(updates: dict[str, Any]) -> dict[str, Any]:
     config["geoip_url"] = str(config.get("geoip_url") or DEFAULT_GEOIP_URL).strip() or DEFAULT_GEOIP_URL
     config["dns_block_enabled"] = bool(config.get("dns_block_enabled"))
     config["dns_redirect_enabled"] = bool(config.get("dns_redirect_enabled", True))
+    if "dns_upstreams" in config:
+        upstreams = config["dns_upstreams"]
+        if isinstance(upstreams, str):
+            upstreams = [item.strip() for item in upstreams.replace("\n", ",").split(",")]
+        config["dns_upstreams"] = normalize_dns_upstreams(upstreams)
     if "geosite_tags" in config:
         tags = config["geosite_tags"]
         if isinstance(tags, str):
@@ -115,6 +127,18 @@ def normalize_domains(values: list[Any]) -> list[str]:
             continue
         domains.add(item)
     return sorted(domains)
+
+
+def normalize_dns_upstreams(values: list[Any]) -> list[str]:
+    upstreams: list[str] = []
+    for value in values:
+        item = str(value or "").strip()
+        if not item:
+            continue
+        if item.startswith(("https://", "tls://", "quic://")):
+            continue
+        upstreams.append(item)
+    return upstreams[:8]
 
 
 def _geoip_status() -> dict[str, Any]:
@@ -338,15 +362,16 @@ def _remove_dns_container(client) -> None:
         pass
 
 
-def build_dnsmasq_config(domains: list[str]) -> str:
+def build_dnsmasq_config(domains: list[str], upstreams: list[str]) -> str:
+    servers = upstreams or normalize_dns_upstreams([settings.default_client_dns or ""]) or ["1.1.1.1", "8.8.8.8"]
     lines = [
         f"port={DNS_REDIRECT_PORT}",
         "no-resolv",
-        "server=1.1.1.1",
-        "server=8.8.8.8",
         "bind-dynamic",
         "log-queries",
     ]
+    for server in servers:
+        lines.append(f"server={server}")
     for domain in domains:
         lines.append(f"address=/{domain}/0.0.0.0")
         lines.append(f"address=/{domain}/::")
@@ -362,10 +387,10 @@ def _dns_block_domains(config: dict[str, Any]) -> list[str]:
     return normalize_domains(list(domains))
 
 
-def start_dns_block(domains: list[str]) -> None:
+def start_dns_block(domains: list[str], upstreams: list[str]) -> None:
     os.makedirs(ROUTING_DIR, exist_ok=True)
     with open(DNSMASQ_CONF_PATH, "w", encoding="utf-8") as fh:
-        fh.write(build_dnsmasq_config(domains))
+        fh.write(build_dnsmasq_config(domains, upstreams))
 
     client = docker.from_env()
     image_id, data_mount = _panel_image_and_data_mount()
@@ -416,7 +441,7 @@ def apply_geoip_block() -> dict[str, Any]:
         dns_domains = _dns_block_domains(config)
         if not dns_domains:
             raise RuntimeError("DNS Block is enabled, but no domains are selected")
-        start_dns_block(dns_domains)
+        start_dns_block(dns_domains, config["dns_upstreams"])
     else:
         stop_dns_block()
 

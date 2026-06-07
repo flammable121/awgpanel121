@@ -49,6 +49,7 @@ const routingForm = ref({
   geoip_tags_text: "",
   dns_block_enabled: false,
   dns_redirect_enabled: true,
+  dns_upstreams_text: "",
   geosite_url: "",
   geosite_tags_text: "",
   manual_domains_text: "",
@@ -235,6 +236,7 @@ const applyRoutingPayload = (data) => {
     geoip_tags_text: (config.geoip_tags || []).join(", "),
     dns_block_enabled: !!config.dns_block_enabled,
     dns_redirect_enabled: config.dns_redirect_enabled !== false,
+    dns_upstreams_text: (config.dns_upstreams || []).join(", "),
     geosite_url: config.geosite_url || "",
     geosite_tags_text: (config.geosite_tags || []).join(", "),
     manual_domains_text: (config.manual_domains || []).join("\n"),
@@ -329,6 +331,7 @@ const saveRouting = async () => {
       geoip_tags: normalizeTagsText(routingForm.value.geoip_tags_text).split(", ").filter(Boolean),
       dns_block_enabled: routingForm.value.dns_block_enabled,
       dns_redirect_enabled: routingForm.value.dns_redirect_enabled,
+      dns_upstreams: normalizeTagsText(routingForm.value.dns_upstreams_text).split(", ").filter(Boolean),
       geosite_url: routingForm.value.geosite_url,
       geosite_tags: normalizeTagsText(routingForm.value.geosite_tags_text).split(", ").filter(Boolean),
       manual_domains: String(routingForm.value.manual_domains_text || "")
@@ -503,6 +506,14 @@ onMounted(() => {
                   <label class="check-row">
                     <input type="checkbox" v-model="routingForm.dns_redirect_enabled" />
                     <span>Перехватывать DNS клиентов AWG</span>
+                  </label>
+                  <label>
+                    <span>Upstream DNS для DNS Block</span>
+                    <input
+                      type="text"
+                      v-model="routingForm.dns_upstreams_text"
+                      placeholder="1.1.1.1, 8.8.8.8"
+                    />
                   </label>
                   <label>
                     <span>GEOIP URL</span>
