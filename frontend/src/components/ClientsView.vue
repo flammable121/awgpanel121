@@ -27,16 +27,48 @@ const collator = new Intl.Collator(undefined, {
 
 const normalizeSearch = (value) => String(value ?? "").trim().toLowerCase();
 
+const nameSortParts = (value) => {
+  const text = String(value ?? "").trim().toLowerCase();
+  const match = text.match(/^(\D*)(\d+)(.*)$/);
+  if (!match) {
+    return { prefix: text, number: null, suffix: "" };
+  }
+  return {
+    prefix: match[1],
+    number: Number(match[2]),
+    suffix: match[3],
+  };
+};
+
+const comparePeerNames = (a, b) => {
+  const aParts = nameSortParts(a.name);
+  const bParts = nameSortParts(b.name);
+  const prefixCompare = collator.compare(aParts.prefix, bParts.prefix);
+  if (prefixCompare !== 0) {
+    return prefixCompare;
+  }
+  if (aParts.number !== null && bParts.number !== null && aParts.number !== bParts.number) {
+    return aParts.number - bParts.number;
+  }
+  const suffixCompare = collator.compare(aParts.suffix, bParts.suffix);
+  if (suffixCompare !== 0) {
+    return suffixCompare;
+  }
+  const nameCompare = collator.compare(String(a.name ?? ""), String(b.name ?? ""));
+  if (nameCompare !== 0) {
+    return nameCompare;
+  }
+  return collator.compare(a.id || "", b.id || "");
+};
+
 const searchFieldsFor = (peer, needle) => {
   const fields = [
     peer.name,
     peer.note,
     peer.status_label,
-    peer.expires_display,
-    peer.client_dns,
   ];
   if (/[.:/,]/.test(needle)) {
-    fields.push(peer.allowed_ips, peer.client_allowed_ips, peer.public_key);
+    fields.push(peer.allowed_ips, peer.client_allowed_ips, peer.client_dns, peer.public_key);
   }
   return fields.map(normalizeSearch).filter(Boolean);
 };
@@ -84,6 +116,9 @@ const sortedPeers = computed(() => {
   const dir = sortDir.value;
   const order = { active: 0, disabled: 1, expired: 2 };
   data.sort((a, b) => {
+    if (key === "name") {
+      return comparePeerNames(a, b) * dir;
+    }
     let aVal = a[key];
     let bVal = b[key];
     if (key === "expires") {
