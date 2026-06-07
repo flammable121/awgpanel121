@@ -898,6 +898,103 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   color: var(--accent);
 }
 
+.autocomplete-item.active {
+  background: rgba(18, 179, 138, 0.2);
+  color: var(--accent);
+}
+
+.routing-card {
+  display: grid;
+  gap: 18px;
+}
+
+.route-switches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.route-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+}
+
+.route-switch-row > span {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.route-url-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.chip-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 48px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(12, 17, 24, 0.6);
+}
+
+.chip-input:focus-within {
+  outline: 2px solid rgba(18, 179, 138, 0.25);
+  border-color: var(--accent);
+}
+
+.chip-input input {
+  flex: 1 1 160px;
+  min-width: 120px;
+  width: auto;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  outline: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.chip button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+}
+
+.chip button:hover {
+  color: var(--ink);
+}
+
+.chip-suggestions {
+  flex-basis: 100%;
+}
+
 .awg-divider {
   height: 1px;
   background: var(--border);

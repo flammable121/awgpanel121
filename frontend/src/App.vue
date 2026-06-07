@@ -4,6 +4,7 @@ import DashboardView from "./components/DashboardView.vue";
 import ClientsView from "./components/ClientsView.vue";
 import AwgInfoView from "./components/AwgInfoView.vue";
 import ApiInfoView from "./components/ApiInfoView.vue";
+import RoutingView from "./components/RoutingView.vue";
 
 const basePath = (window.__PANEL_BASE__ || "").replace(/\/+$/, "");
 const logoutUrl = basePath ? `${basePath}/logout` : "/logout";
@@ -23,7 +24,7 @@ const setTab = (value) => {
 };
 
 const initialTab = new URLSearchParams(window.location.search).get("tab");
-if (["dashboard", "clients", "awg", "api"].includes(initialTab)) {
+if (["dashboard", "clients", "awg", "routing", "api"].includes(initialTab)) {
   tab.value = initialTab;
 }
 
@@ -67,6 +68,14 @@ const closeNav = () => {
           </button>
           <button
             class="side-link"
+            :class="{ active: tab === 'routing' }"
+            type="button"
+            @click="setTab('routing'); closeNav()"
+          >
+            Маршрутизация
+          </button>
+          <button
+            class="side-link"
             :class="{ active: tab === 'api' }"
             type="button"
             @click="setTab('api'); closeNav()"
@@ -87,6 +96,7 @@ const closeNav = () => {
         <DashboardView v-if="tab === 'dashboard'" />
         <ClientsView v-else-if="tab === 'clients'" />
         <AwgInfoView v-else-if="tab === 'awg'" />
+        <RoutingView v-else-if="tab === 'routing'" />
         <ApiInfoView v-else />
       </div>
     </main>

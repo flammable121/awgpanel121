@@ -170,6 +170,13 @@ async def api_awg_routing_update(request: Request):
         if not isinstance(domains, list):
             raise HTTPException(status_code=400, detail="manual_domains must be a list")
         updates["manual_domains"] = domains
+    if "bypass_domains" in payload:
+        domains = payload.get("bypass_domains")
+        if isinstance(domains, str):
+            domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
+        if not isinstance(domains, list):
+            raise HTTPException(status_code=400, detail="bypass_domains must be a list")
+        updates["bypass_domains"] = domains
 
     save_routing_config(updates)
     return {"ok": True, **routing_status()}

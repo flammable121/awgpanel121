@@ -39,6 +39,7 @@ def _default_config() -> dict[str, Any]:
         "geosite_tags": [],
         "geosite_url": DEFAULT_GEOSITE_URL,
         "manual_domains": [],
+        "bypass_domains": [],
         "last_geoip_update": None,
         "last_geosite_update": None,
         "last_apply": None,
@@ -79,6 +80,12 @@ def load_routing_config() -> dict[str, Any]:
     if not isinstance(domains, list):
         domains = []
     config["manual_domains"] = normalize_domains(domains)
+    bypass_domains = config.get("bypass_domains", [])
+    if isinstance(bypass_domains, str):
+        bypass_domains = [item.strip() for item in bypass_domains.replace("\n", ",").split(",")]
+    if not isinstance(bypass_domains, list):
+        bypass_domains = []
+    config["bypass_domains"] = normalize_domains(bypass_domains)
     config["geosite_url"] = str(config.get("geosite_url") or DEFAULT_GEOSITE_URL).strip() or DEFAULT_GEOSITE_URL
     return config
 
@@ -110,6 +117,11 @@ def save_routing_config(updates: dict[str, Any]) -> dict[str, Any]:
         if isinstance(domains, str):
             domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
         config["manual_domains"] = normalize_domains(domains)
+    if "bypass_domains" in config:
+        domains = config["bypass_domains"]
+        if isinstance(domains, str):
+            domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
+        config["bypass_domains"] = normalize_domains(domains)
     config["geosite_url"] = str(config.get("geosite_url") or DEFAULT_GEOSITE_URL).strip() or DEFAULT_GEOSITE_URL
     update_secrets_file({ROUTING_SECRET_KEY: config})
     return config
@@ -362,16 +374,20 @@ def _remove_dns_container(client) -> None:
         pass
 
 
-def build_dnsmasq_config(domains: list[str], upstreams: list[str]) -> str:
+def build_dnsmasq_config(domains: list[str], upstreams: list[str], bypass_domains: list[str]) -> str:
     servers = upstreams or normalize_dns_upstreams([settings.default_client_dns or ""]) or ["1.1.1.1", "8.8.8.8"]
     lines = [
         f"port={DNS_REDIRECT_PORT}",
         "no-resolv",
         "bind-dynamic",
-        "log-queries",
+        "cache-size=10000",
+        "neg-ttl=60",
     ]
     for server in servers:
         lines.append(f"server={server}")
+    for domain in bypass_domains:
+        for server in servers:
+            lines.append(f"server=/{domain}/{server}")
     for domain in domains:
         lines.append(f"address=/{domain}/0.0.0.0")
         lines.append(f"address=/{domain}/::")
@@ -387,10 +403,10 @@ def _dns_block_domains(config: dict[str, Any]) -> list[str]:
     return normalize_domains(list(domains))
 
 
-def start_dns_block(domains: list[str], upstreams: list[str]) -> None:
+def start_dns_block(domains: list[str], upstreams: list[str], bypass_domains: list[str]) -> None:
     os.makedirs(ROUTING_DIR, exist_ok=True)
     with open(DNSMASQ_CONF_PATH, "w", encoding="utf-8") as fh:
-        fh.write(build_dnsmasq_config(domains, upstreams))
+        fh.write(build_dnsmasq_config(domains, upstreams, bypass_domains))
 
     client = docker.from_env()
     image_id, data_mount = _panel_image_and_data_mount()
@@ -441,7 +457,9 @@ def apply_geoip_block() -> dict[str, Any]:
         dns_domains = _dns_block_domains(config)
         if not dns_domains:
             raise RuntimeError("DNS Block is enabled, but no domains are selected")
-        start_dns_block(dns_domains, config["dns_upstreams"])
+        bypass_domains = set(config["bypass_domains"])
+        dns_domains = [domain for domain in dns_domains if domain not in bypass_domains]
+        start_dns_block(dns_domains, config["dns_upstreams"], config["bypass_domains"])
     else:
         stop_dns_block()
 

@@ -53,6 +53,7 @@ const routingForm = ref({
   geosite_url: "",
   geosite_tags_text: "",
   manual_domains_text: "",
+  bypass_domains_text: "",
 });
 const routingGeoip = ref({
   exists: false,
@@ -74,6 +75,7 @@ const routingMessage = ref("");
 const geoipTagsInput = ref(null);
 const geositeTagsInput = ref(null);
 const manualDomainInput = ref(null);
+const bypassDomainInput = ref(null);
 const textAutocomplete = ref({
   field: "",
   open: false,
@@ -150,12 +152,30 @@ const autocompleteSources = {
     existing: () => splitDomainText(routingForm.value.manual_domains_text),
     valid: (item) => item.includes("."),
   },
+  bypass_domains_text: {
+    minLength: 2,
+    source: () => [
+      "gemini.google.com",
+      "generativelanguage.googleapis.com",
+      "googleapis.com",
+      "googleusercontent.com",
+      "spotify.com",
+      "open.spotify.com",
+      "spclient.wg.spotify.com",
+      "scdn.co",
+      "spotifycdn.com",
+      "audio-ak-spotify-com.akamaized.net",
+    ],
+    existing: () => splitDomainText(routingForm.value.bypass_domains_text),
+    valid: (item) => item.includes("."),
+  },
 };
 
 const inputRefs = {
   geoip_tags_text: geoipTagsInput,
   geosite_tags_text: geositeTagsInput,
   manual_domains_text: manualDomainInput,
+  bypass_domains_text: bypassDomainInput,
 };
 
 const autocompleteSuggestions = computed(() => {
@@ -240,6 +260,7 @@ const applyRoutingPayload = (data) => {
     geosite_url: config.geosite_url || "",
     geosite_tags_text: (config.geosite_tags || []).join(", "),
     manual_domains_text: (config.manual_domains || []).join("\n"),
+    bypass_domains_text: (config.bypass_domains || []).join("\n"),
   };
   routingGeoip.value = {
     exists: !!data?.geoip?.exists,
@@ -335,6 +356,11 @@ const saveRouting = async () => {
       geosite_url: routingForm.value.geosite_url,
       geosite_tags: normalizeTagsText(routingForm.value.geosite_tags_text).split(", ").filter(Boolean),
       manual_domains: String(routingForm.value.manual_domains_text || "")
+        .replace(/\n/g, ",")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      bypass_domains: String(routingForm.value.bypass_domains_text || "")
         .replace(/\n/g, ",")
         .split(",")
         .map((item) => item.trim())
@@ -476,6 +502,33 @@ onMounted(() => {
                     <span>DNS по умолчанию</span>
                     <input type="text" v-model="settingsForm.default_client_dns" placeholder="1.1.1.1, 8.8.8.8" />
                   </label>
+                  <label>
+                    <span>Исключения DNS Block</span>
+                    <div class="autocomplete-wrap">
+                      <textarea
+                        ref="bypassDomainInput"
+                        v-model="routingForm.bypass_domains_text"
+                        rows="4"
+                        placeholder="gemini.google.com&#10;spotify.com&#10;scdn.co"
+                        @input="updateTextAutocomplete($event, 'bypass_domains_text')"
+                        @click="updateTextAutocomplete($event, 'bypass_domains_text')"
+                        @keyup="updateTextAutocomplete($event, 'bypass_domains_text')"
+                        @keydown="handleTextAutocompleteKeydown"
+                        @blur="closeTextAutocompleteSoon"
+                      ></textarea>
+                      <div v-if="textAutocomplete.open && textAutocomplete.field === 'bypass_domains_text' && autocompleteSuggestions.length" class="autocomplete-list">
+                        <button
+                          v-for="domain in autocompleteSuggestions"
+                          :key="domain"
+                          class="autocomplete-item"
+                          type="button"
+                          @mousedown.prevent="applyTextSuggestion(domain)"
+                        >
+                          {{ domain }}
+                        </button>
+                      </div>
+                    </div>
+                  </label>
                 </div>
                 <div class="awg-actions">
                   <button class="btn primary" type="button" :disabled="settingsSaving" @click="saveDefaults">
@@ -487,7 +540,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="sub-collapse">
+          <div v-if="false" class="sub-collapse">
             <button class="collapse-header small" :class="{ open: showRouting }" @click="showRouting = !showRouting">
               <span>Маршрутизация</span>
               <span class="collapse-chevron">v</span>
