@@ -122,6 +122,12 @@ const suggestions = computed(() => {
     .slice(0, 10);
 });
 
+const bypassDomainPool = computed(() =>
+  Array.from(new Set([...bypassSuggestions, ...commonBlockedDomains, ...form.value.manual_domains]))
+);
+
+fields.bypass_domains.suggestions = () => bypassDomainPool.value;
+
 const applyPayload = (data) => {
   const config = data?.config || {};
   form.value = {
@@ -304,7 +310,7 @@ onMounted(load);
           <span v-for="item in form.dns_upstreams" :key="item" class="chip">
             {{ item }} <button type="button" @click="removeItem('dns_upstreams', item)">×</button>
           </span>
-          <input type="text" placeholder="111.88.96.50" @input="onChipInput('dns_upstreams', $event)" @keydown="onKeydown('dns_upstreams', $event)" @blur="commitInput('dns_upstreams', $event)" />
+          <input type="text" :placeholder="form.dns_upstreams.length ? '' : '111.88.96.50'" @input="onChipInput('dns_upstreams', $event)" @keydown="onKeydown('dns_upstreams', $event)" @blur="commitInput('dns_upstreams', $event)" />
           <div v-if="activeInput.field === 'dns_upstreams' && suggestions.length" class="autocomplete-list chip-suggestions">
             <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('dns_upstreams', item, $event)">{{ item }}</button>
           </div>
@@ -317,7 +323,7 @@ onMounted(load);
           <span v-for="item in form.geoip_tags" :key="item" class="chip">
             {{ item }} <button type="button" @click="removeItem('geoip_tags', item)">×</button>
           </span>
-          <input type="text" placeholder="ru" @input="onChipInput('geoip_tags', $event)" @keydown="onKeydown('geoip_tags', $event)" @blur="commitInput('geoip_tags', $event)" />
+          <input type="text" :placeholder="form.geoip_tags.length ? '' : 'ru'" @input="onChipInput('geoip_tags', $event)" @keydown="onKeydown('geoip_tags', $event)" @blur="commitInput('geoip_tags', $event)" />
           <div v-if="activeInput.field === 'geoip_tags' && suggestions.length" class="autocomplete-list chip-suggestions">
             <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('geoip_tags', item, $event)">{{ item }}</button>
           </div>
@@ -330,7 +336,7 @@ onMounted(load);
           <span v-for="item in form.geosite_tags" :key="item" class="chip">
             {{ item }} <button type="button" @click="removeItem('geosite_tags', item)">×</button>
           </span>
-          <input type="text" placeholder="category-ads-all" @input="onChipInput('geosite_tags', $event)" @keydown="onKeydown('geosite_tags', $event)" @blur="commitInput('geosite_tags', $event)" />
+          <input type="text" :placeholder="form.geosite_tags.length ? '' : 'category-ads-all'" @input="onChipInput('geosite_tags', $event)" @keydown="onKeydown('geosite_tags', $event)" @blur="commitInput('geosite_tags', $event)" />
           <div v-if="activeInput.field === 'geosite_tags' && suggestions.length" class="autocomplete-list chip-suggestions">
             <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('geosite_tags', item, $event)">{{ item }}</button>
           </div>
@@ -343,7 +349,7 @@ onMounted(load);
           <span v-for="item in form.manual_domains" :key="item" class="chip">
             {{ item }} <button type="button" @click="removeItem('manual_domains', item)">×</button>
           </span>
-          <input type="text" placeholder="wildberries.ru" @input="onChipInput('manual_domains', $event)" @keydown="onKeydown('manual_domains', $event)" @blur="commitInput('manual_domains', $event)" />
+          <input type="text" :placeholder="form.manual_domains.length ? '' : 'wildberries.ru'" @input="onChipInput('manual_domains', $event)" @keydown="onKeydown('manual_domains', $event)" @blur="commitInput('manual_domains', $event)" />
           <div v-if="activeInput.field === 'manual_domains' && suggestions.length" class="autocomplete-list chip-suggestions">
             <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('manual_domains', item, $event)">{{ item }}</button>
           </div>
@@ -356,7 +362,7 @@ onMounted(load);
           <span v-for="item in form.bypass_domains" :key="item" class="chip">
             {{ item }} <button type="button" @click="removeItem('bypass_domains', item)">×</button>
           </span>
-          <input type="text" placeholder="gemini.google.com" @input="onChipInput('bypass_domains', $event)" @keydown="onKeydown('bypass_domains', $event)" @blur="commitInput('bypass_domains', $event)" />
+          <input type="text" :placeholder="form.bypass_domains.length ? '' : 'gemini.google.com'" @input="onChipInput('bypass_domains', $event)" @keydown="onKeydown('bypass_domains', $event)" @blur="commitInput('bypass_domains', $event)" />
           <div v-if="activeInput.field === 'bypass_domains' && suggestions.length" class="autocomplete-list chip-suggestions">
             <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('bypass_domains', item, $event)">{{ item }}</button>
           </div>
@@ -364,13 +370,19 @@ onMounted(load);
       </label>
     </div>
 
-    <div class="route-meta">
-      <div><span>GEOIP:</span> {{ geoip.exists ? "загружен" : "не загружен" }}</div>
-      <div><span>Обновлен:</span> {{ formatDate(geoip.mtime) }}</div>
-      <div><span>Тегов:</span> {{ geoip.tags.length }}</div>
-      <div><span>GEOSITE:</span> {{ geosite.exists ? "загружен" : "не загружен" }}</div>
-      <div><span>Обновлен:</span> {{ formatDate(geosite.mtime) }}</div>
-      <div><span>Тегов:</span> {{ geosite.tags.length }}</div>
+    <div class="route-resource-grid">
+      <div class="route-resource">
+        <div class="route-resource-title">GEOIP</div>
+        <div><span>Статус:</span> {{ geoip.exists ? "загружен" : "не загружен" }}</div>
+        <div><span>Обновлен:</span> {{ formatDate(geoip.mtime) }}</div>
+        <div><span>Тегов:</span> {{ geoip.tags.length }}</div>
+      </div>
+      <div class="route-resource">
+        <div class="route-resource-title">GEOSITE</div>
+        <div><span>Статус:</span> {{ geosite.exists ? "загружен" : "не загружен" }}</div>
+        <div><span>Обновлен:</span> {{ formatDate(geosite.mtime) }}</div>
+        <div><span>Тегов:</span> {{ geosite.tags.length }}</div>
+      </div>
     </div>
 
     <div class="awg-actions">
