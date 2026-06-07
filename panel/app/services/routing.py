@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import ipaddress
+import socket
+import struct
 import tempfile
 import time
 import urllib.request
@@ -185,6 +188,90 @@ def normalize_dns_upstreams(values: list[Any]) -> list[str]:
     return upstreams[:8]
 
 
+def _parse_dns_server(server: str) -> tuple[str, int]:
+    value = str(server or "").strip()
+    if not value:
+        return "", 53
+    if "#" in value:
+        host, port = value.rsplit("#", 1)
+        try:
+            return host.strip(), int(port)
+        except ValueError:
+            return host.strip(), 53
+    return value, 53
+
+
+def _dns_query_packet(domain: str, qtype: int) -> bytes:
+    query_id = struct.unpack("!H", os.urandom(2))[0]
+    labels = domain.rstrip(".").split(".")
+    qname = b"".join(bytes([len(label)]) + label.encode("ascii", "ignore") for label in labels) + b"\x00"
+    header = struct.pack("!HHHHHH", query_id, 0x0100, 1, 0, 0, 0)
+    return header + qname + struct.pack("!HH", qtype, 1)
+
+
+def _skip_dns_name(data: bytes, offset: int) -> int:
+    while offset < len(data):
+        length = data[offset]
+        if length == 0:
+            return offset + 1
+        if length & 0xC0 == 0xC0:
+            return offset + 2
+        offset += 1 + length
+    return offset
+
+
+def _query_dns_ips(domain: str, servers: list[str], timeout: float = 0.7) -> set[str]:
+    ips: set[str] = set()
+    for server in servers[:3]:
+        host, port = _parse_dns_server(server)
+        if not host:
+            continue
+        for qtype in (1, 28):
+            try:
+                packet = _dns_query_packet(domain, qtype)
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                    sock.settimeout(timeout)
+                    sock.sendto(packet, (host, port))
+                    data, _ = sock.recvfrom(4096)
+                if len(data) < 12:
+                    continue
+                _tid, _flags, qdcount, ancount, _nscount, _arcount = struct.unpack("!HHHHHH", data[:12])
+                offset = 12
+                for _ in range(qdcount):
+                    offset = _skip_dns_name(data, offset) + 4
+                for _ in range(ancount):
+                    offset = _skip_dns_name(data, offset)
+                    if offset + 10 > len(data):
+                        break
+                    rtype, _rclass, _ttl, rdlength = struct.unpack("!HHIH", data[offset : offset + 10])
+                    offset += 10
+                    rdata = data[offset : offset + rdlength]
+                    offset += rdlength
+                    if rtype == 1 and rdlength == 4:
+                        ips.add(socket.inet_ntop(socket.AF_INET, rdata))
+                    elif rtype == 28 and rdlength == 16:
+                        ips.add(socket.inet_ntop(socket.AF_INET6, rdata))
+            except Exception:
+                continue
+    return ips
+
+
+def resolve_bypass_ips(domains: list[str], servers: list[str]) -> tuple[list[str], list[str]]:
+    v4: set[str] = set()
+    v6: set[str] = set()
+    for domain in domains[:800]:
+        for ip in _query_dns_ips(domain, servers):
+            try:
+                parsed = ipaddress.ip_address(ip)
+            except ValueError:
+                continue
+            if parsed.version == 4:
+                v4.add(str(parsed))
+            else:
+                v6.add(str(parsed))
+    return sorted(v4), sorted(v6)
+
+
 def _geoip_status() -> dict[str, Any]:
     try:
         stat = os.stat(GEOIP_PATH)
@@ -300,8 +387,38 @@ def _nft_elements(items: list[str]) -> str:
     return ",\n".join(lines)
 
 
-def build_nft_rules(v4: list[str], v6: list[str], dns_redirect: bool = False) -> str:
+def build_nft_rules(
+    v4: list[str],
+    v6: list[str],
+    dns_redirect: bool = False,
+    allow_v4: list[str] | None = None,
+    allow_v6: list[str] | None = None,
+) -> str:
+    allow_v4 = allow_v4 or []
+    allow_v6 = allow_v6 or []
     parts = [f"table inet {NFT_TABLE} {{"]
+    if allow_v4:
+        parts.extend(
+            [
+                "  set geoip_allow_v4 {",
+                "    type ipv4_addr",
+                "    elements = {",
+                _nft_elements(allow_v4),
+                "    }",
+                "  }",
+            ]
+        )
+    if allow_v6:
+        parts.extend(
+            [
+                "  set geoip_allow_v6 {",
+                "    type ipv6_addr",
+                "    elements = {",
+                _nft_elements(allow_v6),
+                "    }",
+                "  }",
+            ]
+        )
     if v4:
         parts.extend(
             [
@@ -328,6 +445,10 @@ def build_nft_rules(v4: list[str], v6: list[str], dns_redirect: bool = False) ->
         )
 
     parts.extend(["  chain forward {", "    type filter hook forward priority 0; policy accept;"])
+    if allow_v4:
+        parts.append(f"    iifname {json.dumps(settings.awg_interface)} ip daddr @geoip_allow_v4 counter accept")
+    if allow_v6:
+        parts.append(f"    iifname {json.dumps(settings.awg_interface)} ip6 daddr @geoip_allow_v6 counter accept")
     if v4:
         parts.append(f"    iifname {json.dumps(settings.awg_interface)} ip daddr @geoip_block_v4 counter drop")
     if v6:
@@ -505,19 +626,31 @@ def apply_geoip_block() -> dict[str, Any]:
         v4, v6 = load_geoip_cidrs(GEOIP_PATH, config["geoip_tags"])
 
     dns_domains: list[str] = []
+    bypass_allow_v4: list[str] = []
+    bypass_allow_v6: list[str] = []
     if config["dns_block_enabled"]:
         dns_domains = _dns_block_domains(config)
         if not dns_domains:
             raise RuntimeError("DNS Block is enabled, but no domains are selected")
         bypass_domains = set(_dns_bypass_domains(config))
         dns_domains = [domain for domain in dns_domains if not domain_is_bypassed(domain, bypass_domains)]
+        if config["enabled"] and bypass_domains:
+            bypass_allow_v4, bypass_allow_v6 = resolve_bypass_ips(sorted(bypass_domains), config["bypass_dns_upstreams"])
         start_dns_block(dns_domains, config["dns_upstreams"], sorted(bypass_domains), config["bypass_dns_upstreams"])
     else:
         stop_dns_block()
 
     os.makedirs(ROUTING_DIR, exist_ok=True)
     with open(NFT_RULES_PATH, "w", encoding="utf-8") as fh:
-        fh.write(build_nft_rules(v4, v6, config["dns_block_enabled"] and config["dns_redirect_enabled"]))
+        fh.write(
+            build_nft_rules(
+                v4,
+                v6,
+                config["dns_block_enabled"] and config["dns_redirect_enabled"],
+                bypass_allow_v4,
+                bypass_allow_v6,
+            )
+        )
 
     if not v4 and not v6 and not config["dns_block_enabled"]:
         return clear_geoip_block()
