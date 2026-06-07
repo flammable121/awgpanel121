@@ -159,6 +159,7 @@ def routing_status() -> dict[str, Any]:
         "geosite": _geosite_status(),
         "nft_table": NFT_TABLE,
         "interface": settings.awg_interface,
+        "network_namespace": settings.awg_container,
     }
 
 
@@ -298,17 +299,18 @@ def _panel_image_and_data_mount() -> tuple[str, Mount | None]:
     return image_id, data_mount
 
 
-def _run_nft_helper(command: str) -> None:
+def _run_nft_helper(command: str, network_mode: str | None = None) -> None:
     client = docker.from_env()
     image_id, data_mount = _panel_image_and_data_mount()
     mounts = [data_mount] if data_mount is not None else []
+    target_network_mode = network_mode or f"container:{settings.awg_container}"
     try:
         container = client.containers.run(
             image_id,
             command=["sh", "-lc", command],
             detach=True,
             privileged=True,
-            network_mode="host",
+            network_mode=target_network_mode,
             mounts=mounts,
         )
         result = container.wait(timeout=180)
@@ -375,7 +377,7 @@ def start_dns_block(domains: list[str]) -> None:
             name=DNS_CONTAINER_NAME,
             command=["dnsmasq", "--keep-in-foreground", f"--conf-file={DNSMASQ_CONF_PATH}"],
             detach=True,
-            network_mode="host",
+            network_mode=f"container:{settings.awg_container}",
             restart_policy={"Name": "unless-stopped"},
             mounts=mounts,
         )
@@ -390,6 +392,10 @@ def stop_dns_block() -> None:
 def clear_geoip_block() -> dict[str, Any]:
     stop_dns_block()
     _run_nft_helper(f"nft delete table inet {NFT_TABLE} 2>/dev/null || true")
+    try:
+        _run_nft_helper(f"nft delete table inet {NFT_TABLE} 2>/dev/null || true", network_mode="host")
+    except Exception:
+        pass
     config = save_routing_config({"last_apply": int(time.time()), "last_error": ""})
     return {"ok": True, "config": config, "rules": {"ipv4": 0, "ipv6": 0}}
 
@@ -423,5 +429,9 @@ def apply_geoip_block() -> dict[str, Any]:
 
     command = f"nft delete table inet {NFT_TABLE} 2>/dev/null || true; nft -f {NFT_RULES_PATH}"
     _run_nft_helper(command)
+    try:
+        _run_nft_helper(f"nft delete table inet {NFT_TABLE} 2>/dev/null || true", network_mode="host")
+    except Exception:
+        pass
     config = save_routing_config({"last_apply": int(time.time()), "last_error": ""})
     return {"ok": True, "config": config, "rules": {"ipv4": len(v4), "ipv6": len(v6), "domains": len(dns_domains)}}
