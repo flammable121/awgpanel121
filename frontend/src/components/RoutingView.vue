@@ -129,7 +129,7 @@ const suggestions = computed(() => {
 });
 
 const bypassDomainPool = computed(() =>
-  Array.from(new Set([...bypassSuggestions, ...commonBlockedDomains, ...form.value.manual_domains]))
+  Array.from(new Set([...bypassSuggestions, ...commonBlockedDomains, ...geosite.value.tags, ...form.value.manual_domains]))
 );
 
 fields.bypass_domains.suggestions = () => bypassDomainPool.value;
@@ -234,6 +234,11 @@ const applyRouting = async () => {
 const addItem = (field, value) => {
   const config = fields[field];
   const item = normalize(value);
+  if (field === "bypass_domains" && item && !item.includes(".")) {
+    form.value.bypass_geosite_tags = uniqueList([...form.value.bypass_geosite_tags, item]);
+    activeInput.value = { field: "", query: "", index: 0 };
+    return;
+  }
   if (!item || (config?.domains && !item.includes("."))) return;
   form.value[field] = uniqueList([...form.value[field], item], !!config?.domains);
   activeInput.value = { field: "", query: "", index: 0 };

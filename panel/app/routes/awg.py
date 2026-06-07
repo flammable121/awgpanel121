@@ -132,6 +132,7 @@ async def api_awg_routing_update(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     updates = {}
+    extra_bypass_geosite_tags = []
     if "enabled" in payload:
         updates["enabled"] = bool(payload.get("enabled"))
     if "geoip_tags" in payload:
@@ -176,14 +177,17 @@ async def api_awg_routing_update(request: Request):
             domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
         if not isinstance(domains, list):
             raise HTTPException(status_code=400, detail="bypass_domains must be a list")
-        updates["bypass_domains"] = domains
+        updates["bypass_domains"] = [item for item in domains if "." in str(item or "").strip()]
+        extra_bypass_geosite_tags = [item for item in domains if str(item or "").strip() and "." not in str(item or "").strip()]
     if "bypass_geosite_tags" in payload:
         tags = payload.get("bypass_geosite_tags")
         if isinstance(tags, str):
             tags = [item.strip() for item in tags.replace("\n", ",").split(",")]
         if not isinstance(tags, list):
             raise HTTPException(status_code=400, detail="bypass_geosite_tags must be a list")
-        updates["bypass_geosite_tags"] = tags
+        updates["bypass_geosite_tags"] = tags + extra_bypass_geosite_tags
+    elif extra_bypass_geosite_tags:
+        updates["bypass_geosite_tags"] = extra_bypass_geosite_tags
 
     save_routing_config(updates)
     return {"ok": True, **routing_status()}
