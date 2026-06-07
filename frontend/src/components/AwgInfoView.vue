@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import {
   fetchAwgParams,
   updateAwgParams,
@@ -70,6 +70,35 @@ const routingUpdating = ref(false);
 const routingGeositeUpdating = ref(false);
 const routingApplying = ref(false);
 const routingMessage = ref("");
+const manualDomainInput = ref(null);
+const domainAutocomplete = ref({
+  open: false,
+  query: "",
+  start: 0,
+  end: 0,
+});
+const commonBlockedDomains = [
+  "wildberries.ru",
+  "wb.ru",
+  "sberbank.ru",
+  "sber.ru",
+  "tbank.ru",
+  "tinkoff.ru",
+  "alfabank.ru",
+  "vtb.ru",
+  "gazprombank.ru",
+  "raiffeisen.ru",
+  "ozon.ru",
+  "ozonbank.ru",
+  "avito.ru",
+  "gosuslugi.ru",
+  "nalog.gov.ru",
+  "mos.ru",
+  "domclick.ru",
+  "yoomoney.ru",
+  "qiwi.com",
+  "rzd.ru",
+];
 
 const formatDate = (value) => {
   if (!value) return "—";
@@ -83,6 +112,66 @@ const normalizeTagsText = (value) =>
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean)
     .join(", ");
+
+const splitDomainText = (value) =>
+  String(value || "")
+    .replace(/\n/g, ",")
+    .split(",")
+    .map((item) => item.trim().toLowerCase().replace(/^\*\./, "").replace(/\.$/, ""))
+    .filter(Boolean);
+
+const domainSuggestions = computed(() => {
+  const query = domainAutocomplete.value.query;
+  if (!query || query.length < 2) return [];
+  const existing = new Set(splitDomainText(routingForm.value.manual_domains_text));
+  const pool = new Set([...commonBlockedDomains, ...routingGeosite.value.tags]);
+  return Array.from(pool)
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter((item) => item && item.includes(".") && item.includes(query) && !existing.has(item))
+    .sort((a, b) => {
+      const aStarts = a.startsWith(query) ? 0 : 1;
+      const bStarts = b.startsWith(query) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.localeCompare(b);
+    })
+    .slice(0, 8);
+});
+
+const updateDomainAutocomplete = (event) => {
+  const input = event.target;
+  const value = input.value;
+  const pos = input.selectionStart ?? value.length;
+  const left = value.slice(0, pos);
+  const tokenStart = Math.max(left.lastIndexOf("\n"), left.lastIndexOf(",")) + 1;
+  const right = value.slice(pos);
+  const nextBreaks = [right.indexOf("\n"), right.indexOf(",")].filter((item) => item >= 0);
+  const tokenEnd = nextBreaks.length ? pos + Math.min(...nextBreaks) : value.length;
+  const query = value.slice(tokenStart, pos).trim().toLowerCase().replace(/^\*\./, "");
+  domainAutocomplete.value = {
+    open: query.length >= 2,
+    query,
+    start: tokenStart,
+    end: tokenEnd,
+  };
+};
+
+const closeDomainAutocompleteSoon = () => {
+  setTimeout(() => {
+    domainAutocomplete.value.open = false;
+  }, 120);
+};
+
+const applyDomainSuggestion = (domain) => {
+  const value = routingForm.value.manual_domains_text || "";
+  const before = value.slice(0, domainAutocomplete.value.start);
+  const after = value.slice(domainAutocomplete.value.end);
+  const separator = after.startsWith("\n") || after.startsWith(",") || !after ? "" : "\n";
+  routingForm.value.manual_domains_text = `${before}${domain}${separator}${after}`;
+  domainAutocomplete.value.open = false;
+  requestAnimationFrame(() => {
+    manualDomainInput.value?.focus();
+  });
+};
 
 const applyRoutingPayload = (data) => {
   const config = data?.config || {};
@@ -395,11 +484,28 @@ onMounted(() => {
                   </label>
                   <label>
                     <span>Домены вручную</span>
-                    <textarea
-                      v-model="routingForm.manual_domains_text"
-                      rows="5"
-                      placeholder="wildberries.ru&#10;wb.ru&#10;sberbank.ru&#10;gosuslugi.ru"
-                    ></textarea>
+                    <div class="autocomplete-wrap">
+                      <textarea
+                        ref="manualDomainInput"
+                        v-model="routingForm.manual_domains_text"
+                        rows="5"
+                        placeholder="wildberries.ru&#10;wb.ru&#10;sberbank.ru&#10;gosuslugi.ru"
+                        @input="updateDomainAutocomplete"
+                        @click="updateDomainAutocomplete"
+                        @blur="closeDomainAutocompleteSoon"
+                      ></textarea>
+                      <div v-if="domainAutocomplete.open && domainSuggestions.length" class="autocomplete-list">
+                        <button
+                          v-for="domain in domainSuggestions"
+                          :key="domain"
+                          class="autocomplete-item"
+                          type="button"
+                          @mousedown.prevent="applyDomainSuggestion(domain)"
+                        >
+                          {{ domain }}
+                        </button>
+                      </div>
+                    </div>
                   </label>
                 </div>
                 <div class="route-meta">

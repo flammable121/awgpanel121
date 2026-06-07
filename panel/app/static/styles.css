@@ -869,6 +869,44 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   border-color: rgba(18, 179, 138, 0.75);
 }
 
+.autocomplete-wrap {
+  position: relative;
+}
+
+.autocomplete-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(13, 19, 28, 0.98);
+  box-shadow: var(--shadow);
+  max-height: 220px;
+  overflow: auto;
+}
+
+.autocomplete-item {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.autocomplete-item:hover {
+  background: rgba(18, 179, 138, 0.16);
+  color: var(--accent);
+}
+
 .awg-divider {
   height: 1px;
   background: var(--border);
