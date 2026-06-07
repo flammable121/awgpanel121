@@ -70,8 +70,11 @@ const routingUpdating = ref(false);
 const routingGeositeUpdating = ref(false);
 const routingApplying = ref(false);
 const routingMessage = ref("");
+const geoipTagsInput = ref(null);
+const geositeTagsInput = ref(null);
 const manualDomainInput = ref(null);
-const domainAutocomplete = ref({
+const textAutocomplete = ref({
+  field: "",
   open: false,
   query: "",
   start: 0,
@@ -120,14 +123,50 @@ const splitDomainText = (value) =>
     .map((item) => item.trim().toLowerCase().replace(/^\*\./, "").replace(/\.$/, ""))
     .filter(Boolean);
 
-const domainSuggestions = computed(() => {
-  const query = domainAutocomplete.value.query;
-  if (!query || query.length < 2) return [];
-  const existing = new Set(splitDomainText(routingForm.value.manual_domains_text));
-  const pool = new Set([...commonBlockedDomains, ...routingGeosite.value.tags]);
+const splitTextItems = (value) =>
+  String(value || "")
+    .replace(/\n/g, ",")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+const autocompleteSources = {
+  geoip_tags_text: {
+    minLength: 1,
+    source: () => routingGeoip.value.tags,
+    existing: () => splitTextItems(routingForm.value.geoip_tags_text),
+    valid: () => true,
+  },
+  geosite_tags_text: {
+    minLength: 1,
+    source: () => routingGeosite.value.tags,
+    existing: () => splitTextItems(routingForm.value.geosite_tags_text),
+    valid: () => true,
+  },
+  manual_domains_text: {
+    minLength: 2,
+    source: () => commonBlockedDomains,
+    existing: () => splitDomainText(routingForm.value.manual_domains_text),
+    valid: (item) => item.includes("."),
+  },
+};
+
+const inputRefs = {
+  geoip_tags_text: geoipTagsInput,
+  geosite_tags_text: geositeTagsInput,
+  manual_domains_text: manualDomainInput,
+};
+
+const autocompleteSuggestions = computed(() => {
+  const field = textAutocomplete.value.field;
+  const config = autocompleteSources[field];
+  const query = textAutocomplete.value.query;
+  if (!config || !query || query.length < config.minLength) return [];
+  const existing = new Set(config.existing());
+  const pool = new Set(config.source());
   return Array.from(pool)
     .map((item) => String(item || "").trim().toLowerCase())
-    .filter((item) => item && item.includes(".") && item.includes(query) && !existing.has(item))
+    .filter((item) => item && config.valid(item) && item.includes(query) && !existing.has(item))
     .sort((a, b) => {
       const aStarts = a.startsWith(query) ? 0 : 1;
       const bStarts = b.startsWith(query) ? 0 : 1;
@@ -137,7 +176,7 @@ const domainSuggestions = computed(() => {
     .slice(0, 8);
 });
 
-const updateDomainAutocomplete = (event) => {
+const updateTextAutocomplete = (event, field) => {
   const input = event.target;
   const value = input.value;
   const pos = input.selectionStart ?? value.length;
@@ -147,40 +186,44 @@ const updateDomainAutocomplete = (event) => {
   const nextBreaks = [right.indexOf("\n"), right.indexOf(",")].filter((item) => item >= 0);
   const tokenEnd = nextBreaks.length ? pos + Math.min(...nextBreaks) : value.length;
   const query = value.slice(tokenStart, pos).trim().toLowerCase().replace(/^\*\./, "");
-  domainAutocomplete.value = {
-    open: query.length >= 2,
+  const minLength = autocompleteSources[field]?.minLength || 2;
+  textAutocomplete.value = {
+    field,
+    open: query.length >= minLength,
     query,
     start: tokenStart,
     end: tokenEnd,
   };
 };
 
-const closeDomainAutocompleteSoon = () => {
+const closeTextAutocompleteSoon = () => {
   setTimeout(() => {
-    domainAutocomplete.value.open = false;
+    textAutocomplete.value.open = false;
   }, 120);
 };
 
-const handleDomainAutocompleteKeydown = (event) => {
+const handleTextAutocompleteKeydown = (event) => {
   if (event.key === "Escape") {
-    domainAutocomplete.value.open = false;
+    textAutocomplete.value.open = false;
     return;
   }
-  if ((event.key === "Enter" || event.key === "Tab") && domainAutocomplete.value.open && domainSuggestions.value.length) {
+  if ((event.key === "Enter" || event.key === "Tab") && textAutocomplete.value.open && autocompleteSuggestions.value.length) {
     event.preventDefault();
-    applyDomainSuggestion(domainSuggestions.value[0]);
+    applyTextSuggestion(autocompleteSuggestions.value[0]);
   }
 };
 
-const applyDomainSuggestion = (domain) => {
-  const value = routingForm.value.manual_domains_text || "";
-  const before = value.slice(0, domainAutocomplete.value.start);
-  const after = value.slice(domainAutocomplete.value.end);
+const applyTextSuggestion = (suggestion) => {
+  const field = textAutocomplete.value.field;
+  if (!field || !(field in routingForm.value)) return;
+  const value = routingForm.value[field] || "";
+  const before = value.slice(0, textAutocomplete.value.start);
+  const after = value.slice(textAutocomplete.value.end);
   const separator = after.startsWith("\n") || after.startsWith(",") || !after ? "" : "\n";
-  routingForm.value.manual_domains_text = `${before}${domain}${separator}${after}`;
-  domainAutocomplete.value.open = false;
+  routingForm.value[field] = `${before}${suggestion}${separator}${after}`;
+  textAutocomplete.value.open = false;
   requestAnimationFrame(() => {
-    manualDomainInput.value?.focus();
+    inputRefs[field]?.value?.focus();
   });
 };
 
@@ -471,11 +514,30 @@ onMounted(() => {
                   </label>
                   <label>
                     <span>Блокируемые GEOIP теги</span>
-                    <textarea
-                      v-model="routingForm.geoip_tags_text"
-                      rows="3"
-                      placeholder="ru, cn, private"
-                    ></textarea>
+                    <div class="autocomplete-wrap">
+                      <textarea
+                        ref="geoipTagsInput"
+                        v-model="routingForm.geoip_tags_text"
+                        rows="3"
+                        placeholder="ru, cn, private"
+                        @input="updateTextAutocomplete($event, 'geoip_tags_text')"
+                        @click="updateTextAutocomplete($event, 'geoip_tags_text')"
+                        @keyup="updateTextAutocomplete($event, 'geoip_tags_text')"
+                        @keydown="handleTextAutocompleteKeydown"
+                        @blur="closeTextAutocompleteSoon"
+                      ></textarea>
+                      <div v-if="textAutocomplete.open && textAutocomplete.field === 'geoip_tags_text' && autocompleteSuggestions.length" class="autocomplete-list">
+                        <button
+                          v-for="tag in autocompleteSuggestions"
+                          :key="tag"
+                          class="autocomplete-item"
+                          type="button"
+                          @mousedown.prevent="applyTextSuggestion(tag)"
+                        >
+                          {{ tag }}
+                        </button>
+                      </div>
+                    </div>
                   </label>
                   <label>
                     <span>GEOSITE URL</span>
@@ -487,11 +549,30 @@ onMounted(() => {
                   </label>
                   <label>
                     <span>Блокируемые GEOSITE теги</span>
-                    <textarea
-                      v-model="routingForm.geosite_tags_text"
-                      rows="3"
-                      placeholder="ru, category-ads-all"
-                    ></textarea>
+                    <div class="autocomplete-wrap">
+                      <textarea
+                        ref="geositeTagsInput"
+                        v-model="routingForm.geosite_tags_text"
+                        rows="3"
+                        placeholder="ru, category-ads-all"
+                        @input="updateTextAutocomplete($event, 'geosite_tags_text')"
+                        @click="updateTextAutocomplete($event, 'geosite_tags_text')"
+                        @keyup="updateTextAutocomplete($event, 'geosite_tags_text')"
+                        @keydown="handleTextAutocompleteKeydown"
+                        @blur="closeTextAutocompleteSoon"
+                      ></textarea>
+                      <div v-if="textAutocomplete.open && textAutocomplete.field === 'geosite_tags_text' && autocompleteSuggestions.length" class="autocomplete-list">
+                        <button
+                          v-for="tag in autocompleteSuggestions"
+                          :key="tag"
+                          class="autocomplete-item"
+                          type="button"
+                          @mousedown.prevent="applyTextSuggestion(tag)"
+                        >
+                          {{ tag }}
+                        </button>
+                      </div>
+                    </div>
                   </label>
                   <label>
                     <span>Домены вручную</span>
@@ -501,19 +582,19 @@ onMounted(() => {
                         v-model="routingForm.manual_domains_text"
                         rows="5"
                         placeholder="wildberries.ru&#10;wb.ru&#10;sberbank.ru&#10;gosuslugi.ru"
-                        @input="updateDomainAutocomplete"
-                        @click="updateDomainAutocomplete"
-                        @keyup="updateDomainAutocomplete"
-                        @keydown="handleDomainAutocompleteKeydown"
-                        @blur="closeDomainAutocompleteSoon"
+                        @input="updateTextAutocomplete($event, 'manual_domains_text')"
+                        @click="updateTextAutocomplete($event, 'manual_domains_text')"
+                        @keyup="updateTextAutocomplete($event, 'manual_domains_text')"
+                        @keydown="handleTextAutocompleteKeydown"
+                        @blur="closeTextAutocompleteSoon"
                       ></textarea>
-                      <div v-if="domainAutocomplete.open && domainSuggestions.length" class="autocomplete-list">
+                      <div v-if="textAutocomplete.open && textAutocomplete.field === 'manual_domains_text' && autocompleteSuggestions.length" class="autocomplete-list">
                         <button
-                          v-for="domain in domainSuggestions"
+                          v-for="domain in autocompleteSuggestions"
                           :key="domain"
                           class="autocomplete-item"
                           type="button"
-                          @mousedown.prevent="applyDomainSuggestion(domain)"
+                          @mousedown.prevent="applyTextSuggestion(domain)"
                         >
                           {{ domain }}
                         </button>
