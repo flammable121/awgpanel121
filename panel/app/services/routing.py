@@ -40,6 +40,7 @@ def _default_config() -> dict[str, Any]:
         "geosite_url": DEFAULT_GEOSITE_URL,
         "manual_domains": [],
         "bypass_domains": [],
+        "bypass_geosite_tags": [],
         "last_geoip_update": None,
         "last_geosite_update": None,
         "last_apply": None,
@@ -74,6 +75,12 @@ def load_routing_config() -> dict[str, Any]:
     if not isinstance(geosite_tags, list):
         geosite_tags = []
     config["geosite_tags"] = sorted({str(tag).strip().lower() for tag in geosite_tags if str(tag).strip()})
+    bypass_geosite_tags = config.get("bypass_geosite_tags", [])
+    if isinstance(bypass_geosite_tags, str):
+        bypass_geosite_tags = [item.strip() for item in bypass_geosite_tags.replace("\n", ",").split(",")]
+    if not isinstance(bypass_geosite_tags, list):
+        bypass_geosite_tags = []
+    config["bypass_geosite_tags"] = sorted({str(tag).strip().lower() for tag in bypass_geosite_tags if str(tag).strip()})
     domains = config.get("manual_domains", [])
     if isinstance(domains, str):
         domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
@@ -112,6 +119,11 @@ def save_routing_config(updates: dict[str, Any]) -> dict[str, Any]:
         if isinstance(tags, str):
             tags = [item.strip() for item in tags.replace("\n", ",").split(",")]
         config["geosite_tags"] = sorted({str(tag).strip().lower() for tag in tags if str(tag).strip()})
+    if "bypass_geosite_tags" in config:
+        tags = config["bypass_geosite_tags"]
+        if isinstance(tags, str):
+            tags = [item.strip() for item in tags.replace("\n", ",").split(",")]
+        config["bypass_geosite_tags"] = sorted({str(tag).strip().lower() for tag in tags if str(tag).strip()})
     if "manual_domains" in config:
         domains = config["manual_domains"]
         if isinstance(domains, str):
@@ -139,6 +151,14 @@ def normalize_domains(values: list[Any]) -> list[str]:
             continue
         domains.add(item)
     return sorted(domains)
+
+
+def domain_matches(domain: str, rule: str) -> bool:
+    return domain == rule or domain.endswith(f".{rule}")
+
+
+def domain_is_bypassed(domain: str, bypass_domains: set[str]) -> bool:
+    return any(domain_matches(domain, bypass) or domain_matches(bypass, domain) for bypass in bypass_domains)
 
 
 def normalize_dns_upstreams(values: list[Any]) -> list[str]:
@@ -403,6 +423,15 @@ def _dns_block_domains(config: dict[str, Any]) -> list[str]:
     return normalize_domains(list(domains))
 
 
+def _dns_bypass_domains(config: dict[str, Any]) -> list[str]:
+    domains = set(config.get("bypass_domains", []))
+    if config.get("bypass_geosite_tags"):
+        if not os.path.exists(GEOSITE_PATH):
+            raise RuntimeError("geosite.dat is not downloaded yet")
+        domains.update(load_geosite_domains(GEOSITE_PATH, config["bypass_geosite_tags"]))
+    return normalize_domains(list(domains))
+
+
 def start_dns_block(domains: list[str], upstreams: list[str], bypass_domains: list[str]) -> None:
     os.makedirs(ROUTING_DIR, exist_ok=True)
     with open(DNSMASQ_CONF_PATH, "w", encoding="utf-8") as fh:
@@ -457,9 +486,9 @@ def apply_geoip_block() -> dict[str, Any]:
         dns_domains = _dns_block_domains(config)
         if not dns_domains:
             raise RuntimeError("DNS Block is enabled, but no domains are selected")
-        bypass_domains = set(config["bypass_domains"])
-        dns_domains = [domain for domain in dns_domains if domain not in bypass_domains]
-        start_dns_block(dns_domains, config["dns_upstreams"], config["bypass_domains"])
+        bypass_domains = set(_dns_bypass_domains(config))
+        dns_domains = [domain for domain in dns_domains if not domain_is_bypassed(domain, bypass_domains)]
+        start_dns_block(dns_domains, config["dns_upstreams"], sorted(bypass_domains))
     else:
         stop_dns_block()
 

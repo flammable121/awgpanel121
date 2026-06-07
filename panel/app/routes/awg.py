@@ -177,6 +177,13 @@ async def api_awg_routing_update(request: Request):
         if not isinstance(domains, list):
             raise HTTPException(status_code=400, detail="bypass_domains must be a list")
         updates["bypass_domains"] = domains
+    if "bypass_geosite_tags" in payload:
+        tags = payload.get("bypass_geosite_tags")
+        if isinstance(tags, str):
+            tags = [item.strip() for item in tags.replace("\n", ",").split(",")]
+        if not isinstance(tags, list):
+            raise HTTPException(status_code=400, detail="bypass_geosite_tags must be a list")
+        updates["bypass_geosite_tags"] = tags
 
     save_routing_config(updates)
     return {"ok": True, **routing_status()}

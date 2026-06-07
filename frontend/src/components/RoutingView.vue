@@ -57,6 +57,7 @@ const form = ref({
   geosite_tags: [],
   manual_domains: [],
   bypass_domains: [],
+  bypass_geosite_tags: [],
 });
 const geoip = ref({ exists: false, tags: [], mtime: null });
 const geosite = ref({ exists: false, tags: [], mtime: null });
@@ -97,6 +98,11 @@ const fields = {
     suggestions: () => bypassSuggestions,
     domains: true,
     min: 2,
+  },
+  bypass_geosite_tags: {
+    suggestions: () => geosite.value.tags,
+    domains: false,
+    min: 1,
   },
   dns_upstreams: {
     suggestions: () => ["111.88.96.50", "111.88.96.51", "1.1.1.1", "8.8.8.8", "9.9.9.9"],
@@ -141,6 +147,7 @@ const applyPayload = (data) => {
     geosite_tags: uniqueList(config.geosite_tags || []),
     manual_domains: uniqueList(config.manual_domains || [], true),
     bypass_domains: uniqueList(config.bypass_domains || [], true),
+    bypass_geosite_tags: uniqueList(config.bypass_geosite_tags || []),
   };
   geoip.value = {
     exists: !!data?.geoip?.exists,
@@ -365,6 +372,19 @@ onMounted(load);
           <input type="text" :placeholder="form.bypass_domains.length ? '' : 'gemini.google.com'" @input="onChipInput('bypass_domains', $event)" @keydown="onKeydown('bypass_domains', $event)" @blur="commitInput('bypass_domains', $event)" />
           <div v-if="activeInput.field === 'bypass_domains' && suggestions.length" class="autocomplete-list chip-suggestions">
             <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('bypass_domains', item, $event)">{{ item }}</button>
+          </div>
+        </div>
+      </label>
+
+      <label>
+        <span>Исключения GEOSITE теги</span>
+        <div class="chip-input">
+          <span v-for="item in form.bypass_geosite_tags" :key="item" class="chip">
+            {{ item }} <button type="button" @click="removeItem('bypass_geosite_tags', item)">×</button>
+          </span>
+          <input type="text" :placeholder="form.bypass_geosite_tags.length ? '' : 'google-gemini'" @input="onChipInput('bypass_geosite_tags', $event)" @keydown="onKeydown('bypass_geosite_tags', $event)" @blur="commitInput('bypass_geosite_tags', $event)" />
+          <div v-if="activeInput.field === 'bypass_geosite_tags' && suggestions.length" class="autocomplete-list chip-suggestions">
+            <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('bypass_geosite_tags', item, $event)">{{ item }}</button>
           </div>
         </div>
       </label>
