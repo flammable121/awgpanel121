@@ -45,6 +45,8 @@ def _default_config() -> dict[str, Any]:
         "manual_domains": [],
         "bypass_domains": [],
         "bypass_geosite_tags": [],
+        "block_bypass_domains": [],
+        "block_bypass_geosite_tags": [],
         "last_geoip_update": None,
         "last_geosite_update": None,
         "last_apply": None,
@@ -91,6 +93,14 @@ def load_routing_config() -> dict[str, Any]:
     if not isinstance(bypass_geosite_tags, list):
         bypass_geosite_tags = []
     config["bypass_geosite_tags"] = sorted({str(tag).strip().lower() for tag in bypass_geosite_tags if str(tag).strip()})
+    block_bypass_geosite_tags = config.get("block_bypass_geosite_tags", [])
+    if isinstance(block_bypass_geosite_tags, str):
+        block_bypass_geosite_tags = [item.strip() for item in block_bypass_geosite_tags.replace("\n", ",").split(",")]
+    if not isinstance(block_bypass_geosite_tags, list):
+        block_bypass_geosite_tags = []
+    config["block_bypass_geosite_tags"] = sorted(
+        {str(tag).strip().lower() for tag in block_bypass_geosite_tags if str(tag).strip()}
+    )
     domains = config.get("manual_domains", [])
     if isinstance(domains, str):
         domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
@@ -103,6 +113,12 @@ def load_routing_config() -> dict[str, Any]:
     if not isinstance(bypass_domains, list):
         bypass_domains = []
     config["bypass_domains"] = normalize_domains(bypass_domains)
+    block_bypass_domains = config.get("block_bypass_domains", [])
+    if isinstance(block_bypass_domains, str):
+        block_bypass_domains = [item.strip() for item in block_bypass_domains.replace("\n", ",").split(",")]
+    if not isinstance(block_bypass_domains, list):
+        block_bypass_domains = []
+    config["block_bypass_domains"] = normalize_domains(block_bypass_domains)
     config["geosite_url"] = str(config.get("geosite_url") or DEFAULT_GEOSITE_URL).strip() or DEFAULT_GEOSITE_URL
     return config
 
@@ -139,6 +155,11 @@ def save_routing_config(updates: dict[str, Any]) -> dict[str, Any]:
         if isinstance(tags, str):
             tags = [item.strip() for item in tags.replace("\n", ",").split(",")]
         config["bypass_geosite_tags"] = sorted({str(tag).strip().lower() for tag in tags if str(tag).strip()})
+    if "block_bypass_geosite_tags" in config:
+        tags = config["block_bypass_geosite_tags"]
+        if isinstance(tags, str):
+            tags = [item.strip() for item in tags.replace("\n", ",").split(",")]
+        config["block_bypass_geosite_tags"] = sorted({str(tag).strip().lower() for tag in tags if str(tag).strip()})
     if "manual_domains" in config:
         domains = config["manual_domains"]
         if isinstance(domains, str):
@@ -149,6 +170,11 @@ def save_routing_config(updates: dict[str, Any]) -> dict[str, Any]:
         if isinstance(domains, str):
             domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
         config["bypass_domains"] = normalize_domains(domains)
+    if "block_bypass_domains" in config:
+        domains = config["block_bypass_domains"]
+        if isinstance(domains, str):
+            domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
+        config["block_bypass_domains"] = normalize_domains(domains)
     config["geosite_url"] = str(config.get("geosite_url") or DEFAULT_GEOSITE_URL).strip() or DEFAULT_GEOSITE_URL
     update_secrets_file({ROUTING_SECRET_KEY: config})
     return config
@@ -571,6 +597,15 @@ def _dns_bypass_domains(config: dict[str, Any]) -> list[str]:
     return normalize_domains(list(domains))
 
 
+def _block_bypass_domains(config: dict[str, Any]) -> list[str]:
+    domains = set(config.get("block_bypass_domains", []))
+    if config.get("block_bypass_geosite_tags"):
+        if not os.path.exists(GEOSITE_PATH):
+            raise RuntimeError("geosite.dat is not downloaded yet")
+        domains.update(load_geosite_domains(GEOSITE_PATH, config["block_bypass_geosite_tags"]))
+    return normalize_domains(list(domains))
+
+
 def start_dns_block(
     domains: list[str],
     upstreams: list[str],
@@ -622,12 +657,15 @@ def apply_geoip_block() -> dict[str, Any]:
         raise RuntimeError("geoip.dat is not downloaded yet")
 
     v4, v6 = ([], [])
-    if config["enabled"]:
-        v4, v6 = load_geoip_cidrs(GEOIP_PATH, config["geoip_tags"])
-
-    dns_domains: list[str] = []
     bypass_allow_v4: list[str] = []
     bypass_allow_v6: list[str] = []
+    if config["enabled"]:
+        v4, v6 = load_geoip_cidrs(GEOIP_PATH, config["geoip_tags"])
+        block_bypass_domains = _block_bypass_domains(config)
+        if block_bypass_domains:
+            bypass_allow_v4, bypass_allow_v6 = resolve_bypass_ips(block_bypass_domains, config["bypass_dns_upstreams"])
+
+    dns_domains: list[str] = []
     if config["dns_block_enabled"]:
         dns_domains = _dns_block_domains(config)
         if not dns_domains:
@@ -635,7 +673,9 @@ def apply_geoip_block() -> dict[str, Any]:
         bypass_domains = set(_dns_bypass_domains(config))
         dns_domains = [domain for domain in dns_domains if not domain_is_bypassed(domain, bypass_domains)]
         if config["enabled"] and bypass_domains:
-            bypass_allow_v4, bypass_allow_v6 = resolve_bypass_ips(sorted(bypass_domains), config["bypass_dns_upstreams"])
+            dns_allow_v4, dns_allow_v6 = resolve_bypass_ips(sorted(bypass_domains), config["bypass_dns_upstreams"])
+            bypass_allow_v4 = sorted(set(bypass_allow_v4).union(dns_allow_v4))
+            bypass_allow_v6 = sorted(set(bypass_allow_v6).union(dns_allow_v6))
         start_dns_block(dns_domains, config["dns_upstreams"], sorted(bypass_domains), config["bypass_dns_upstreams"])
     else:
         stop_dns_block()

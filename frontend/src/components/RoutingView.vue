@@ -59,6 +59,8 @@ const form = ref({
   manual_domains: [],
   bypass_domains: [],
   bypass_geosite_tags: [],
+  block_bypass_domains: [],
+  block_bypass_geosite_tags: [],
 });
 const geoip = ref({ exists: false, tags: [], mtime: null });
 const geosite = ref({ exists: false, tags: [], mtime: null });
@@ -105,6 +107,16 @@ const fields = {
     domains: false,
     min: 1,
   },
+  block_bypass_domains: {
+    suggestions: () => bypassSuggestions,
+    domains: true,
+    min: 2,
+  },
+  block_bypass_geosite_tags: {
+    suggestions: () => geosite.value.tags,
+    domains: false,
+    min: 1,
+  },
   dns_upstreams: {
     suggestions: () => ["111.88.96.50", "111.88.96.51", "1.1.1.1", "8.8.8.8", "9.9.9.9"],
     domains: false,
@@ -125,6 +137,8 @@ const suggestions = computed(() => {
   const existing = new Set(
     field === "bypass_domains"
       ? [...form.value.bypass_domains, ...form.value.bypass_geosite_tags]
+      : field === "block_bypass_domains"
+      ? [...form.value.block_bypass_domains, ...form.value.block_bypass_geosite_tags]
       : form.value[field]
   );
   return Array.from(new Set(config.suggestions().map(normalize)))
@@ -143,6 +157,7 @@ const bypassDomainPool = computed(() =>
 );
 
 fields.bypass_domains.suggestions = () => bypassDomainPool.value;
+fields.block_bypass_domains.suggestions = () => bypassDomainPool.value;
 
 const applyPayload = (data) => {
   const config = data?.config || {};
@@ -159,6 +174,8 @@ const applyPayload = (data) => {
     manual_domains: uniqueList(config.manual_domains || [], true),
     bypass_domains: uniqueList(config.bypass_domains || [], true),
     bypass_geosite_tags: uniqueList(config.bypass_geosite_tags || []),
+    block_bypass_domains: uniqueList(config.block_bypass_domains || [], true),
+    block_bypass_geosite_tags: uniqueList(config.block_bypass_geosite_tags || []),
   };
   geoip.value = {
     exists: !!data?.geoip?.exists,
@@ -250,6 +267,11 @@ const addItem = (field, value) => {
     activeInput.value = { field: "", query: "", index: 0 };
     return;
   }
+  if (field === "block_bypass_domains" && item && !item.includes(".")) {
+    form.value.block_bypass_geosite_tags = uniqueList([...form.value.block_bypass_geosite_tags, item]);
+    activeInput.value = { field: "", query: "", index: 0 };
+    return;
+  }
   if (!item || (config?.domains && !item.includes("."))) return;
   form.value[field] = uniqueList([...form.value[field], item], !!config?.domains);
   activeInput.value = { field: "", query: "", index: 0 };
@@ -336,6 +358,22 @@ onMounted(load);
           <input type="text" :placeholder="form.dns_upstreams.length ? '' : '111.88.96.50'" @input="onChipInput('dns_upstreams', $event)" @keydown="onKeydown('dns_upstreams', $event)" @blur="commitInput('dns_upstreams', $event)" />
           <div v-if="activeInput.field === 'dns_upstreams' && suggestions.length" class="autocomplete-list chip-suggestions">
             <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('dns_upstreams', item, $event)">{{ item }}</button>
+          </div>
+        </div>
+      </label>
+
+      <label>
+        <span>Исключения BLOCK</span>
+        <div class="chip-input">
+          <span v-for="item in form.block_bypass_domains" :key="item" class="chip">
+            {{ item }} <button type="button" @click="removeItem('block_bypass_domains', item)">×</button>
+          </span>
+          <span v-for="item in form.block_bypass_geosite_tags" :key="item" class="chip">
+            {{ item }} <button type="button" @click="removeItem('block_bypass_geosite_tags', item)">×</button>
+          </span>
+          <input type="text" :placeholder="form.block_bypass_domains.length || form.block_bypass_geosite_tags.length ? '' : 'spotify или google-gemini'" @input="onChipInput('block_bypass_domains', $event)" @keydown="onKeydown('block_bypass_domains', $event)" @blur="commitInput('block_bypass_domains', $event)" />
+          <div v-if="activeInput.field === 'block_bypass_domains' && suggestions.length" class="autocomplete-list chip-suggestions">
+            <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('block_bypass_domains', item, $event)">{{ item }}</button>
           </div>
         </div>
       </label>

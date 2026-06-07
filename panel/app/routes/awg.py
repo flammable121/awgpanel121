@@ -133,6 +133,7 @@ async def api_awg_routing_update(request: Request):
 
     updates = {}
     extra_bypass_geosite_tags = []
+    extra_block_bypass_geosite_tags = []
     if "enabled" in payload:
         updates["enabled"] = bool(payload.get("enabled"))
     if "geoip_tags" in payload:
@@ -195,6 +196,25 @@ async def api_awg_routing_update(request: Request):
         updates["bypass_geosite_tags"] = tags + extra_bypass_geosite_tags
     elif extra_bypass_geosite_tags:
         updates["bypass_geosite_tags"] = extra_bypass_geosite_tags
+    if "block_bypass_domains" in payload:
+        domains = payload.get("block_bypass_domains")
+        if isinstance(domains, str):
+            domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
+        if not isinstance(domains, list):
+            raise HTTPException(status_code=400, detail="block_bypass_domains must be a list")
+        updates["block_bypass_domains"] = [item for item in domains if "." in str(item or "").strip()]
+        extra_block_bypass_geosite_tags = [
+            item for item in domains if str(item or "").strip() and "." not in str(item or "").strip()
+        ]
+    if "block_bypass_geosite_tags" in payload:
+        tags = payload.get("block_bypass_geosite_tags")
+        if isinstance(tags, str):
+            tags = [item.strip() for item in tags.replace("\n", ",").split(",")]
+        if not isinstance(tags, list):
+            raise HTTPException(status_code=400, detail="block_bypass_geosite_tags must be a list")
+        updates["block_bypass_geosite_tags"] = tags + extra_block_bypass_geosite_tags
+    elif extra_block_bypass_geosite_tags:
+        updates["block_bypass_geosite_tags"] = extra_block_bypass_geosite_tags
 
     save_routing_config(updates)
     return {"ok": True, **routing_status()}
