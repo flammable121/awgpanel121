@@ -161,6 +161,17 @@ const closeDomainAutocompleteSoon = () => {
   }, 120);
 };
 
+const handleDomainAutocompleteKeydown = (event) => {
+  if (event.key === "Escape") {
+    domainAutocomplete.value.open = false;
+    return;
+  }
+  if ((event.key === "Enter" || event.key === "Tab") && domainAutocomplete.value.open && domainSuggestions.value.length) {
+    event.preventDefault();
+    applyDomainSuggestion(domainSuggestions.value[0]);
+  }
+};
+
 const applyDomainSuggestion = (domain) => {
   const value = routingForm.value.manual_domains_text || "";
   const before = value.slice(0, domainAutocomplete.value.start);
@@ -492,6 +503,8 @@ onMounted(() => {
                         placeholder="wildberries.ru&#10;wb.ru&#10;sberbank.ru&#10;gosuslugi.ru"
                         @input="updateDomainAutocomplete"
                         @click="updateDomainAutocomplete"
+                        @keyup="updateDomainAutocomplete"
+                        @keydown="handleDomainAutocompleteKeydown"
                         @blur="closeDomainAutocompleteSoon"
                       ></textarea>
                       <div v-if="domainAutocomplete.open && domainSuggestions.length" class="autocomplete-list">
