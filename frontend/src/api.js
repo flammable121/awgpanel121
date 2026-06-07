@@ -171,6 +171,10 @@ export function clearAwgRouting() {
   return apiPost("/api/awg/routing/clear");
 }
 
+export function resetAwgRouting() {
+  return apiPost("/api/awg/routing/reset");
+}
+
 export async function updateAwgSettings(payload) {
   const response = await fetch(withBase("/api/awg/settings"), {
     method: "POST",

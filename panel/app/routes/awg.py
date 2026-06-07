@@ -16,6 +16,7 @@ from ..services.routing import (
     clear_geoip_block,
     routing_status,
     save_routing_config,
+    reset_routing_config,
     update_geoip_database,
     update_geosite_database,
 )
@@ -267,6 +268,18 @@ def api_awg_routing_apply(request: Request):
 def api_awg_routing_clear(request: Request):
     require_login(request)
     try:
+        result = clear_geoip_block()
+    except Exception as exc:
+        save_routing_config({"last_error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {**result, **routing_status()}
+
+
+@router.post("/api/awg/routing/reset")
+def api_awg_routing_reset(request: Request):
+    require_login(request)
+    try:
+        reset_routing_config()
         result = clear_geoip_block()
     except Exception as exc:
         save_routing_config({"last_error": str(exc)})

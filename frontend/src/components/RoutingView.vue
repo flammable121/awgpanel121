@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
+import ActionModal from "./ActionModal.vue";
 import {
   fetchAwgRouting,
   updateAwgRouting,
@@ -8,43 +9,8 @@ import {
   updateAwgRoutingGeosite,
   applyAwgRouting,
   clearAwgRouting,
+  resetAwgRouting,
 } from "../api.js";
-
-const commonBlockedDomains = [
-  "wildberries.ru",
-  "wb.ru",
-  "sberbank.ru",
-  "sber.ru",
-  "tbank.ru",
-  "tinkoff.ru",
-  "alfabank.ru",
-  "vtb.ru",
-  "gazprombank.ru",
-  "raiffeisen.ru",
-  "ozon.ru",
-  "ozonbank.ru",
-  "avito.ru",
-  "gosuslugi.ru",
-  "nalog.gov.ru",
-  "mos.ru",
-  "domclick.ru",
-  "yoomoney.ru",
-  "qiwi.com",
-  "rzd.ru",
-];
-
-const bypassSuggestions = [
-  "gemini.google.com",
-  "generativelanguage.googleapis.com",
-  "googleapis.com",
-  "googleusercontent.com",
-  "spotify.com",
-  "open.spotify.com",
-  "spclient.wg.spotify.com",
-  "scdn.co",
-  "spotifycdn.com",
-  "audio-ak-spotify-com.akamaized.net",
-];
 
 const form = ref({
   enabled: false,
@@ -71,6 +37,8 @@ const updatingGeosite = ref(false);
 const applying = ref(false);
 const message = ref("");
 const activeInput = ref({ field: "", query: "", index: 0 });
+const resetModalOpen = ref(false);
+const resetModalState = ref("confirm");
 
 const normalize = (value) => String(value || "").trim().toLowerCase().replace(/^\*\./, "").replace(/\.$/, "");
 const uniqueList = (items, domains = false) =>
@@ -93,12 +61,12 @@ const fields = {
     min: 1,
   },
   manual_domains: {
-    suggestions: () => commonBlockedDomains,
+    suggestions: () => [],
     domains: true,
     min: 2,
   },
   bypass_domains: {
-    suggestions: () => bypassSuggestions,
+    suggestions: () => [],
     domains: true,
     min: 2,
   },
@@ -108,7 +76,7 @@ const fields = {
     min: 1,
   },
   block_bypass_domains: {
-    suggestions: () => bypassSuggestions,
+    suggestions: () => [],
     domains: true,
     min: 2,
   },
@@ -118,12 +86,12 @@ const fields = {
     min: 1,
   },
   dns_upstreams: {
-    suggestions: () => ["111.88.96.50", "111.88.96.51", "1.1.1.1", "8.8.8.8", "9.9.9.9"],
+    suggestions: () => [],
     domains: false,
     min: 1,
   },
   bypass_dns_upstreams: {
-    suggestions: () => ["1.1.1.1", "8.8.8.8", "9.9.9.9", "8.8.4.4", "1.0.0.1"],
+    suggestions: () => [],
     domains: false,
     min: 1,
   },
@@ -153,7 +121,7 @@ const suggestions = computed(() => {
 });
 
 const bypassDomainPool = computed(() =>
-  Array.from(new Set([...bypassSuggestions, ...commonBlockedDomains, ...geosite.value.tags, ...form.value.manual_domains]))
+  Array.from(new Set([...geosite.value.tags, ...form.value.manual_domains]))
 );
 
 fields.bypass_domains.suggestions = () => bypassDomainPool.value;
@@ -164,9 +132,9 @@ const applyPayload = (data) => {
   form.value = {
     enabled: !!config.enabled,
     dns_block_enabled: !!config.dns_block_enabled,
-    dns_redirect_enabled: config.dns_redirect_enabled !== false,
+    dns_redirect_enabled: !!config.dns_redirect_enabled,
     dns_upstreams: uniqueList(config.dns_upstreams || []),
-    bypass_dns_upstreams: uniqueList(config.bypass_dns_upstreams || ["1.1.1.1", "8.8.8.8"]),
+    bypass_dns_upstreams: uniqueList(config.bypass_dns_upstreams || []),
     geoip_url: config.geoip_url || "",
     geoip_tags: uniqueList(config.geoip_tags || []),
     geosite_url: config.geosite_url || "",
@@ -256,6 +224,29 @@ const applyRouting = async () => {
     message.value = err?.message || "Не удалось применить маршрутизацию";
   } finally {
     applying.value = false;
+  }
+};
+
+const openResetModal = () => {
+  resetModalOpen.value = true;
+  resetModalState.value = "confirm";
+};
+
+const closeResetModal = () => {
+  resetModalOpen.value = false;
+  resetModalState.value = "confirm";
+};
+
+const runReset = async () => {
+  resetModalState.value = "loading";
+  try {
+    const data = await resetAwgRouting();
+    applyPayload(data);
+    message.value = "Настройки маршрутизации сброшены";
+    resetModalState.value = "success";
+  } catch (err) {
+    message.value = err?.message || "Не удалось сбросить маршрутизацию";
+    resetModalState.value = "error";
   }
 };
 
@@ -363,22 +354,6 @@ onMounted(load);
       </label>
 
       <label>
-        <span>Исключения BLOCK</span>
-        <div class="chip-input">
-          <span v-for="item in form.block_bypass_domains" :key="item" class="chip">
-            {{ item }} <button type="button" @click="removeItem('block_bypass_domains', item)">×</button>
-          </span>
-          <span v-for="item in form.block_bypass_geosite_tags" :key="item" class="chip">
-            {{ item }} <button type="button" @click="removeItem('block_bypass_geosite_tags', item)">×</button>
-          </span>
-          <input type="text" :placeholder="form.block_bypass_domains.length || form.block_bypass_geosite_tags.length ? '' : 'spotify или google-gemini'" @input="onChipInput('block_bypass_domains', $event)" @keydown="onKeydown('block_bypass_domains', $event)" @blur="commitInput('block_bypass_domains', $event)" />
-          <div v-if="activeInput.field === 'block_bypass_domains' && suggestions.length" class="autocomplete-list chip-suggestions">
-            <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('block_bypass_domains', item, $event)">{{ item }}</button>
-          </div>
-        </div>
-      </label>
-
-      <label>
         <span>Upstream DNS для исключений</span>
         <div class="chip-input">
           <span v-for="item in form.bypass_dns_upstreams" :key="item" class="chip">
@@ -431,33 +406,21 @@ onMounted(load);
       </label>
 
       <label>
-        <span>Исключения DNS Block</span>
+        <span>Исключения BLOCK</span>
         <div class="chip-input">
-          <span v-for="item in form.bypass_domains" :key="item" class="chip">
-            {{ item }} <button type="button" @click="removeItem('bypass_domains', item)">×</button>
+          <span v-for="item in form.block_bypass_domains" :key="item" class="chip">
+            {{ item }} <button type="button" @click="removeItem('block_bypass_domains', item)">×</button>
           </span>
-          <span v-for="item in form.bypass_geosite_tags" :key="item" class="chip">
-            {{ item }} <button type="button" @click="removeItem('bypass_geosite_tags', item)">×</button>
+          <span v-for="item in form.block_bypass_geosite_tags" :key="item" class="chip">
+            {{ item }} <button type="button" @click="removeItem('block_bypass_geosite_tags', item)">×</button>
           </span>
-          <input type="text" :placeholder="form.bypass_domains.length || form.bypass_geosite_tags.length ? '' : 'gemini.google.com или google-gemini'" @input="onChipInput('bypass_domains', $event)" @keydown="onKeydown('bypass_domains', $event)" @blur="commitInput('bypass_domains', $event)" />
-          <div v-if="activeInput.field === 'bypass_domains' && suggestions.length" class="autocomplete-list chip-suggestions">
-            <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('bypass_domains', item, $event)">{{ item }}</button>
+          <input type="text" :placeholder="form.block_bypass_domains.length || form.block_bypass_geosite_tags.length ? '' : 'spotify или google-gemini'" @input="onChipInput('block_bypass_domains', $event)" @keydown="onKeydown('block_bypass_domains', $event)" @blur="commitInput('block_bypass_domains', $event)" />
+          <div v-if="activeInput.field === 'block_bypass_domains' && suggestions.length" class="autocomplete-list chip-suggestions">
+            <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('block_bypass_domains', item, $event)">{{ item }}</button>
           </div>
         </div>
       </label>
 
-      <label>
-        <span>Исключения GEOSITE теги</span>
-        <div class="chip-input">
-          <span v-for="item in form.bypass_geosite_tags" :key="item" class="chip">
-            {{ item }} <button type="button" @click="removeItem('bypass_geosite_tags', item)">×</button>
-          </span>
-          <input type="text" :placeholder="form.bypass_geosite_tags.length ? '' : 'google-gemini'" @input="onChipInput('bypass_geosite_tags', $event)" @keydown="onKeydown('bypass_geosite_tags', $event)" @blur="commitInput('bypass_geosite_tags', $event)" />
-          <div v-if="activeInput.field === 'bypass_geosite_tags' && suggestions.length" class="autocomplete-list chip-suggestions">
-            <button v-for="(item, index) in suggestions" :key="item" class="autocomplete-item" :class="{ active: index === activeInput.index }" type="button" @mousedown.prevent="pickSuggestion('bypass_geosite_tags', item, $event)">{{ item }}</button>
-          </div>
-        </div>
-      </label>
     </div>
 
     <div class="route-resource-grid">
@@ -479,8 +442,23 @@ onMounted(load);
       <button class="btn ghost" type="button" :disabled="updatingGeoip" @click="updateGeoip">{{ updatingGeoip ? "Обновление..." : "Обновить GEOIP" }}</button>
       <button class="btn ghost" type="button" :disabled="updatingGeosite" @click="updateGeosite">{{ updatingGeosite ? "Обновление..." : "Обновить GEOSITE" }}</button>
       <button class="btn ghost" type="button" :disabled="saving" @click="save">{{ saving ? "Сохранение..." : "Сохранить" }}</button>
+      <button class="btn danger" type="button" :disabled="saving || applying || loading" @click="openResetModal">Сбросить настройки</button>
       <button class="btn primary" type="button" :disabled="applying || loading" @click="applyRouting">{{ applying ? "Применение..." : "Применить" }}</button>
       <div v-if="message" class="muted">{{ message }}</div>
     </div>
   </section>
+
+  <ActionModal
+    :show="resetModalOpen"
+    title="Сбросить маршрутизацию?"
+    message="Будут удалены все настройки маршрутизации, списки блокировок, исключения и активные правила block."
+    confirm-text="Сбросить"
+    cancel-text="Отмена"
+    loading-text="Сброс настроек..."
+    success-text="Настройки маршрутизации сброшены"
+    error-text="Не удалось сбросить настройки"
+    :state="resetModalState"
+    @confirm="runReset"
+    @close="closeResetModal"
+  />
 </template>

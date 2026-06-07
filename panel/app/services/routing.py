@@ -37,9 +37,9 @@ def _default_config() -> dict[str, Any]:
         "geoip_tags": [],
         "geoip_url": DEFAULT_GEOIP_URL,
         "dns_block_enabled": False,
-        "dns_redirect_enabled": True,
+        "dns_redirect_enabled": False,
         "dns_upstreams": [],
-        "bypass_dns_upstreams": ["1.1.1.1", "8.8.8.8"],
+        "bypass_dns_upstreams": [],
         "geosite_tags": [],
         "geosite_url": DEFAULT_GEOSITE_URL,
         "manual_domains": [],
@@ -68,7 +68,7 @@ def load_routing_config() -> dict[str, Any]:
     config["geoip_tags"] = sorted({str(tag).strip().lower() for tag in tags if str(tag).strip()})
     config["geoip_url"] = str(config.get("geoip_url") or DEFAULT_GEOIP_URL).strip() or DEFAULT_GEOIP_URL
     config["dns_block_enabled"] = bool(config.get("dns_block_enabled"))
-    config["dns_redirect_enabled"] = bool(config.get("dns_redirect_enabled", True))
+    config["dns_redirect_enabled"] = bool(config.get("dns_redirect_enabled", False))
     upstreams = config.get("dns_upstreams", [])
     if isinstance(upstreams, str):
         upstreams = [item.strip() for item in upstreams.replace("\n", ",").split(",")]
@@ -134,7 +134,7 @@ def save_routing_config(updates: dict[str, Any]) -> dict[str, Any]:
     config["enabled"] = bool(config.get("enabled"))
     config["geoip_url"] = str(config.get("geoip_url") or DEFAULT_GEOIP_URL).strip() or DEFAULT_GEOIP_URL
     config["dns_block_enabled"] = bool(config.get("dns_block_enabled"))
-    config["dns_redirect_enabled"] = bool(config.get("dns_redirect_enabled", True))
+    config["dns_redirect_enabled"] = bool(config.get("dns_redirect_enabled", False))
     if "dns_upstreams" in config:
         upstreams = config["dns_upstreams"]
         if isinstance(upstreams, str):
@@ -176,6 +176,14 @@ def save_routing_config(updates: dict[str, Any]) -> dict[str, Any]:
             domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
         config["block_bypass_domains"] = normalize_domains(domains)
     config["geosite_url"] = str(config.get("geosite_url") or DEFAULT_GEOSITE_URL).strip() or DEFAULT_GEOSITE_URL
+    update_secrets_file({ROUTING_SECRET_KEY: config})
+    return config
+
+
+def reset_routing_config() -> dict[str, Any]:
+    config = _default_config()
+    config["last_apply"] = int(time.time())
+    config["last_error"] = ""
     update_secrets_file({ROUTING_SECRET_KEY: config})
     return config
 
