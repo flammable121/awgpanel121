@@ -202,6 +202,36 @@ def normalize_domains(values: list[Any]) -> list[str]:
     return sorted(domains)
 
 
+def normalize_domains_ordered(values: list[Any]) -> list[str]:
+    domains: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        item = str(value or "").strip().lower().strip(".")
+        if not item:
+            continue
+        if item.startswith("*."):
+            item = item[2:]
+        if "/" in item or " " in item or item.startswith(".") or "." not in item:
+            continue
+        if item in seen:
+            continue
+        seen.add(item)
+        domains.append(item)
+    return domains
+
+
+def merge_domains_ordered(*groups: list[Any]) -> list[str]:
+    domains: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for domain in normalize_domains_ordered(group):
+            if domain in seen:
+                continue
+            seen.add(domain)
+            domains.append(domain)
+    return domains
+
+
 def domain_matches(domain: str, rule: str) -> bool:
     return domain == rule or domain.endswith(f".{rule}")
 
@@ -597,21 +627,23 @@ def _dns_block_domains(config: dict[str, Any]) -> list[str]:
 
 
 def _dns_bypass_domains(config: dict[str, Any]) -> list[str]:
-    domains = set(config.get("bypass_domains", []))
+    groups = [config.get("bypass_domains", [])]
     if config.get("bypass_geosite_tags"):
         if not os.path.exists(GEOSITE_PATH):
             raise RuntimeError("geosite.dat is not downloaded yet")
-        domains.update(load_geosite_domains(GEOSITE_PATH, config["bypass_geosite_tags"]))
-    return normalize_domains(list(domains))
+        for tag in sorted(config["bypass_geosite_tags"], key=lambda value: (-len(str(value)), str(value))):
+            groups.append(load_geosite_domains(GEOSITE_PATH, [tag]))
+    return merge_domains_ordered(*groups)
 
 
 def _block_bypass_domains(config: dict[str, Any]) -> list[str]:
-    domains = set(config.get("block_bypass_domains", []))
+    groups = [config.get("block_bypass_domains", [])]
     if config.get("block_bypass_geosite_tags"):
         if not os.path.exists(GEOSITE_PATH):
             raise RuntimeError("geosite.dat is not downloaded yet")
-        domains.update(load_geosite_domains(GEOSITE_PATH, config["block_bypass_geosite_tags"]))
-    return normalize_domains(list(domains))
+        for tag in sorted(config["block_bypass_geosite_tags"], key=lambda value: (-len(str(value)), str(value))):
+            groups.append(load_geosite_domains(GEOSITE_PATH, [tag]))
+    return merge_domains_ordered(*groups)
 
 
 def start_dns_block(
