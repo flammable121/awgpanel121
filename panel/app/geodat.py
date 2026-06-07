@@ -57,6 +57,41 @@ def _build_list_message(list_name: str, item_name: str) -> type:
         cidr_field.label = descriptor_pb2.FieldDescriptorProto.LABEL_REPEATED
         cidr_field.type = descriptor_pb2.FieldDescriptorProto.TYPE_MESSAGE
         cidr_field.type_name = ".CIDR"
+    if item_name == "GeoSite":
+        domain_msg = file_desc.message_type.add()
+        domain_msg.name = "Domain"
+
+        type_enum = domain_msg.enum_type.add()
+        type_enum.name = "Type"
+        for name, number in [
+            ("Plain", 0),
+            ("Regex", 1),
+            ("Domain", 2),
+            ("Full", 3),
+        ]:
+            enum_value = type_enum.value.add()
+            enum_value.name = name
+            enum_value.number = number
+
+        domain_type = domain_msg.field.add()
+        domain_type.name = "type"
+        domain_type.number = 1
+        domain_type.label = descriptor_pb2.FieldDescriptorProto.LABEL_OPTIONAL
+        domain_type.type = descriptor_pb2.FieldDescriptorProto.TYPE_ENUM
+        domain_type.type_name = ".Domain.Type"
+
+        domain_value = domain_msg.field.add()
+        domain_value.name = "value"
+        domain_value.number = 2
+        domain_value.label = descriptor_pb2.FieldDescriptorProto.LABEL_OPTIONAL
+        domain_value.type = descriptor_pb2.FieldDescriptorProto.TYPE_STRING
+
+        domain_field = item_msg.field.add()
+        domain_field.name = "domain"
+        domain_field.number = 2
+        domain_field.label = descriptor_pb2.FieldDescriptorProto.LABEL_REPEATED
+        domain_field.type = descriptor_pb2.FieldDescriptorProto.TYPE_MESSAGE
+        domain_field.type_name = ".Domain"
 
     list_msg = file_desc.message_type.add()
     list_msg.name = list_name
@@ -123,3 +158,29 @@ def load_geosite_tags(path: str) -> list[str]:
         data = fh.read()
     message = _GeoSiteList.FromString(data)
     return _extract_codes(message.entry)
+
+
+def load_geosite_domains(path: str, tags: Iterable[str]) -> list[str]:
+    selected = {tag.strip().lower() for tag in tags if tag and tag.strip()}
+    if not selected:
+        return []
+
+    with open(path, "rb") as fh:
+        data = fh.read()
+    message = _GeoSiteList.FromString(data)
+
+    domains: set[str] = set()
+    for entry in message.entry:
+        code = getattr(entry, "country_code", "").lower()
+        if code not in selected:
+            continue
+        for domain in getattr(entry, "domain", []):
+            value = str(getattr(domain, "value", "")).strip().lower().strip(".")
+            if not value or "/" in value or " " in value:
+                continue
+            domain_type = int(getattr(domain, "type", 0))
+            if domain_type in (2, 3):
+                domains.add(value)
+            elif domain_type == 0 and "." in value and not value.startswith("."):
+                domains.add(value)
+    return sorted(domains)

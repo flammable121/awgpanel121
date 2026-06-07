@@ -17,6 +17,7 @@ from ..services.routing import (
     routing_status,
     save_routing_config,
     update_geoip_database,
+    update_geosite_database,
 )
 from ..db import SessionLocal
 
@@ -142,6 +143,26 @@ async def api_awg_routing_update(request: Request):
         updates["geoip_tags"] = tags
     if "geoip_url" in payload:
         updates["geoip_url"] = str(payload.get("geoip_url") or "").strip()
+    if "dns_block_enabled" in payload:
+        updates["dns_block_enabled"] = bool(payload.get("dns_block_enabled"))
+    if "dns_redirect_enabled" in payload:
+        updates["dns_redirect_enabled"] = bool(payload.get("dns_redirect_enabled"))
+    if "geosite_tags" in payload:
+        tags = payload.get("geosite_tags")
+        if isinstance(tags, str):
+            tags = [item.strip() for item in tags.replace("\n", ",").split(",")]
+        if not isinstance(tags, list):
+            raise HTTPException(status_code=400, detail="geosite_tags must be a list")
+        updates["geosite_tags"] = tags
+    if "geosite_url" in payload:
+        updates["geosite_url"] = str(payload.get("geosite_url") or "").strip()
+    if "manual_domains" in payload:
+        domains = payload.get("manual_domains")
+        if isinstance(domains, str):
+            domains = [item.strip() for item in domains.replace("\n", ",").split(",")]
+        if not isinstance(domains, list):
+            raise HTTPException(status_code=400, detail="manual_domains must be a list")
+        updates["manual_domains"] = domains
 
     save_routing_config(updates)
     return {"ok": True, **routing_status()}
@@ -158,6 +179,22 @@ async def api_awg_routing_geoip_update(request: Request):
         payload = {}
     try:
         update_geoip_database(str(payload.get("geoip_url") or "").strip() or None)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"ok": True, **routing_status()}
+
+
+@router.post("/api/awg/routing/geosite/update")
+async def api_awg_routing_geosite_update(request: Request):
+    require_login(request)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    try:
+        update_geosite_database(str(payload.get("geosite_url") or "").strip() or None)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"ok": True, **routing_status()}

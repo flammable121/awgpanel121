@@ -14,7 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates nftables \
+    && apt-get install -y --no-install-recommends ca-certificates dnsmasq nftables \
     && rm -rf /var/lib/apt/lists/*
 
 COPY panel/requirements.txt /app/requirements.txt

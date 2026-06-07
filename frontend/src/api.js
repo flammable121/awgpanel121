@@ -153,6 +153,16 @@ export function updateAwgRoutingGeoip(payload) {
   });
 }
 
+export function updateAwgRoutingGeosite(payload) {
+  return apiPost("/api/awg/routing/geosite/update", {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "fetch",
+    },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
 export function applyAwgRouting() {
   return apiPost("/api/awg/routing/apply");
 }

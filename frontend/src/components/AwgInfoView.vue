@@ -9,6 +9,7 @@ import {
   fetchAwgRouting,
   updateAwgRouting,
   updateAwgRoutingGeoip,
+  updateAwgRoutingGeosite,
   applyAwgRouting,
   clearAwgRouting,
 } from "../api.js";
@@ -46,6 +47,11 @@ const routingForm = ref({
   enabled: false,
   geoip_url: "",
   geoip_tags_text: "",
+  dns_block_enabled: false,
+  dns_redirect_enabled: true,
+  geosite_url: "",
+  geosite_tags_text: "",
+  manual_domains_text: "",
 });
 const routingGeoip = ref({
   exists: false,
@@ -53,8 +59,15 @@ const routingGeoip = ref({
   mtime: null,
   size: 0,
 });
+const routingGeosite = ref({
+  exists: false,
+  tags: [],
+  mtime: null,
+  size: 0,
+});
 const routingSaving = ref(false);
 const routingUpdating = ref(false);
+const routingGeositeUpdating = ref(false);
 const routingApplying = ref(false);
 const routingMessage = ref("");
 
@@ -77,12 +90,23 @@ const applyRoutingPayload = (data) => {
     enabled: !!config.enabled,
     geoip_url: config.geoip_url || "",
     geoip_tags_text: (config.geoip_tags || []).join(", "),
+    dns_block_enabled: !!config.dns_block_enabled,
+    dns_redirect_enabled: config.dns_redirect_enabled !== false,
+    geosite_url: config.geosite_url || "",
+    geosite_tags_text: (config.geosite_tags || []).join(", "),
+    manual_domains_text: (config.manual_domains || []).join("\n"),
   };
   routingGeoip.value = {
     exists: !!data?.geoip?.exists,
     tags: data?.geoip?.tags || [],
     mtime: data?.geoip?.mtime || null,
     size: data?.geoip?.size || 0,
+  };
+  routingGeosite.value = {
+    exists: !!data?.geosite?.exists,
+    tags: data?.geosite?.tags || [],
+    mtime: data?.geosite?.mtime || null,
+    size: data?.geosite?.size || 0,
   };
   if (config.last_error) {
     routingMessage.value = config.last_error;
@@ -160,6 +184,15 @@ const saveRouting = async () => {
       enabled: routingForm.value.enabled,
       geoip_url: routingForm.value.geoip_url,
       geoip_tags: normalizeTagsText(routingForm.value.geoip_tags_text).split(", ").filter(Boolean),
+      dns_block_enabled: routingForm.value.dns_block_enabled,
+      dns_redirect_enabled: routingForm.value.dns_redirect_enabled,
+      geosite_url: routingForm.value.geosite_url,
+      geosite_tags: normalizeTagsText(routingForm.value.geosite_tags_text).split(", ").filter(Boolean),
+      manual_domains: String(routingForm.value.manual_domains_text || "")
+        .replace(/\n/g, ",")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
     });
     applyRoutingPayload(data);
     routingMessage.value = "Настройки маршрутизации сохранены";
@@ -169,6 +202,20 @@ const saveRouting = async () => {
     throw err;
   } finally {
     routingSaving.value = false;
+  }
+};
+
+const updateGeosite = async () => {
+  routingGeositeUpdating.value = true;
+  routingMessage.value = "";
+  try {
+    const data = await updateAwgRoutingGeosite({ geosite_url: routingForm.value.geosite_url });
+    applyRoutingPayload(data);
+    routingMessage.value = "GEOSITE база обновлена";
+  } catch (err) {
+    routingMessage.value = err && err.message ? err.message : "Не удалось обновить GEOSITE";
+  } finally {
+    routingGeositeUpdating.value = false;
   }
 };
 
@@ -195,8 +242,10 @@ const applyRouting = async () => {
     applyRoutingPayload(data);
     const rules = data.rules || {};
     routingMessage.value = routingForm.value.enabled
-      ? `Блокировка применена: IPv4 ${rules.ipv4 || 0}, IPv6 ${rules.ipv6 || 0}`
-      : "Блокировка отключена";
+      ? `Блокировка применена: IPv4 ${rules.ipv4 || 0}, IPv6 ${rules.ipv6 || 0}, доменов ${rules.domains || 0}`
+      : routingForm.value.dns_block_enabled
+        ? `DNS-блокировка применена: доменов ${rules.domains || 0}`
+        : "Блокировка отключена";
   } catch (err) {
     routingMessage.value = err && err.message ? err.message : "Не удалось применить маршрутизацию";
   } finally {
@@ -304,6 +353,14 @@ onMounted(() => {
                     <input type="checkbox" v-model="routingForm.enabled" />
                     <span>Включить GEOIP Block</span>
                   </label>
+                  <label class="check-row">
+                    <input type="checkbox" v-model="routingForm.dns_block_enabled" />
+                    <span>Включить DNS/GEOSITE Block</span>
+                  </label>
+                  <label class="check-row">
+                    <input type="checkbox" v-model="routingForm.dns_redirect_enabled" />
+                    <span>Перехватывать DNS клиентов AWG</span>
+                  </label>
                   <label>
                     <span>GEOIP URL</span>
                     <input
@@ -320,11 +377,38 @@ onMounted(() => {
                       placeholder="ru, cn, private"
                     ></textarea>
                   </label>
+                  <label>
+                    <span>GEOSITE URL</span>
+                    <input
+                      type="text"
+                      v-model="routingForm.geosite_url"
+                      placeholder="https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
+                    />
+                  </label>
+                  <label>
+                    <span>Блокируемые GEOSITE теги</span>
+                    <textarea
+                      v-model="routingForm.geosite_tags_text"
+                      rows="3"
+                      placeholder="ru, category-ads-all"
+                    ></textarea>
+                  </label>
+                  <label>
+                    <span>Домены вручную</span>
+                    <textarea
+                      v-model="routingForm.manual_domains_text"
+                      rows="5"
+                      placeholder="wildberries.ru&#10;wb.ru&#10;sberbank.ru&#10;gosuslugi.ru"
+                    ></textarea>
+                  </label>
                 </div>
                 <div class="route-meta">
                   <div><span>GEOIP:</span> {{ routingGeoip.exists ? "загружен" : "не загружен" }}</div>
                   <div><span>Обновлен:</span> {{ formatDate(routingGeoip.mtime) }}</div>
                   <div><span>Тегов:</span> {{ routingGeoip.tags.length }}</div>
+                  <div><span>GEOSITE:</span> {{ routingGeosite.exists ? "загружен" : "не загружен" }}</div>
+                  <div><span>Обновлен:</span> {{ formatDate(routingGeosite.mtime) }}</div>
+                  <div><span>Тегов:</span> {{ routingGeosite.tags.length }}</div>
                 </div>
                 <div v-if="routingGeoip.tags.length" class="tag-list">
                   <button
@@ -337,9 +421,23 @@ onMounted(() => {
                     {{ tag }}
                   </button>
                 </div>
+                <div v-if="routingGeosite.tags.length" class="tag-list">
+                  <button
+                    v-for="tag in routingGeosite.tags.slice(0, 120)"
+                    :key="tag"
+                    class="tag-button"
+                    type="button"
+                    @click="routingForm.geosite_tags_text = normalizeTagsText(`${routingForm.geosite_tags_text}, ${tag}`)"
+                  >
+                    {{ tag }}
+                  </button>
+                </div>
                 <div class="awg-actions">
                   <button class="btn ghost" type="button" :disabled="routingUpdating" @click="updateGeoip">
                     {{ routingUpdating ? "Обновление..." : "Обновить GEOIP" }}
+                  </button>
+                  <button class="btn ghost" type="button" :disabled="routingGeositeUpdating" @click="updateGeosite">
+                    {{ routingGeositeUpdating ? "Обновление..." : "Обновить GEOSITE" }}
                   </button>
                   <button class="btn ghost" type="button" :disabled="routingSaving" @click="saveRouting">
                     {{ routingSaving ? "Сохранение..." : "Сохранить" }}
