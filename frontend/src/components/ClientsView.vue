@@ -16,6 +16,7 @@ const modalQrUrl = ref("");
 const modalConfigUrl = ref("");
 const createOpen = ref(false);
 const creating = ref(false);
+const createError = ref("");
 const deletePeerTarget = ref(null);
 const deleteBusy = ref(false);
 let statsTimer = null;
@@ -214,16 +215,17 @@ const cancelDelete = () => {
 
 const onCreate = async (payload) => {
   creating.value = true;
+  createError.value = "";
   try {
     await createPeer(payload);
     await loadPeers();
     createOpen.value = false;
   } catch (err) {
     if (err?.message) {
-      alert(err.message);
+      createError.value = err.message;
       return;
     }
-    alert("Не удалось создать клиента");
+    createError.value = "Не удалось создать клиента";
   } finally {
     creating.value = false;
   }
@@ -331,10 +333,12 @@ onBeforeUnmount(() => {
 });
 
 const openCreate = () => {
+  createError.value = "";
   createOpen.value = true;
 };
 
 const closeCreate = () => {
+  createError.value = "";
   createOpen.value = false;
 };
 </script>
@@ -370,6 +374,7 @@ const closeCreate = () => {
   <CreateModal
     :show="createOpen"
     :loading="creating"
+    :error="createError"
     @close="closeCreate"
     @submit="onCreate"
   />

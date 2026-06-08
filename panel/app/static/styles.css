@@ -208,6 +208,13 @@ a:hover {
   align-items: end;
 }
 
+.form-warning {
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 6px;
+}
+
 .toggle-inline {
   display: flex;
   align-items: center;

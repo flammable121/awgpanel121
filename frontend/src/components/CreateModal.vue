@@ -7,6 +7,7 @@ export default {
   props: {
     show: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
+    error: { type: String, default: "" },
   },
   emits: ["close", "submit"],
   data() {
@@ -26,10 +27,17 @@ export default {
         expires_time: this.neverExpires ? "" : this.expiresTime,
         tz_offset: String(new Date().getTimezoneOffset()),
       });
+    },
+    reset() {
       this.name = "";
       this.neverExpires = true;
       this.expiresDate = "";
       this.expiresTime = "";
+    },
+  },
+  watch: {
+    show(value) {
+      if (!value) this.reset();
     },
   },
 };
@@ -45,6 +53,7 @@ export default {
         <label>
           <span>Имя</span>
           <input type="text" v-model="name" placeholder="например, iPhone" />
+          <div v-if="error" class="form-warning">{{ error }}</div>
         </label>
         <div class="form-row form-row-inline">
           <label>

@@ -120,10 +120,20 @@ X-API-Key: &lt;API_TOKEN&gt;</pre>
 GET    /api/v1/peers/&lt;id&gt;
 POST   /api/v1/peers
 PATCH  /api/v1/peers/&lt;id&gt;
+POST   /api/v1/peers/&lt;id&gt;/name
+POST   /api/v1/peers/&lt;id&gt;/expires
+POST   /api/v1/peers/&lt;id&gt;/status
 POST   /api/v1/peers/&lt;id&gt;/toggle
 DELETE /api/v1/peers/&lt;id&gt;
+POST   /api/v1/peers/&lt;id&gt;/delete
 GET    /api/v1/peers/&lt;id&gt;/config
 GET    /api/v1/peers/&lt;id&gt;/qr</pre>
+
+      <div class="api-doc-title">Payload</div>
+      <pre class="api-pre">{"name":"client-1"}
+{"enabled":true}
+{"expires_at":"2026-07-01T12:00:00Z"}
+{"never_expires":true}</pre>
 
       <div class="api-doc-title">Пример: список конфигов</div>
       <pre class="api-pre">curl -H "Authorization: Bearer &lt;API_TOKEN&gt;" \\

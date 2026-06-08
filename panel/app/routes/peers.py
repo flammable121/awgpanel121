@@ -52,6 +52,11 @@ def _ensure_unique_peer_name(db, name: str, exclude_id: str | None = None) -> No
         raise HTTPException(status_code=409, detail="Конфигурация с таким именем уже существует")
 
 
+def _apply_peers(db, controller) -> None:
+    interface_lines, _, _ = read_interface_config(controller)
+    apply_config_from_db(db, controller, interface_lines, allow_fail=True)
+
+
 @router.get("/api/peers")
 def api_peers(request: Request, db=Depends(get_db)):
     require_login(request)
@@ -151,6 +156,69 @@ async def api_v1_update_peer(request: Request, peer_id: str, db=Depends(get_db),
     return {"ok": True, "peer": peer_basic_row(peer)}
 
 
+@router.post("/api/v1/peers/{peer_id}/name")
+async def api_v1_set_peer_name(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    controller = awg()
+    peer = db.query(Peer).filter_by(id=peer_id).first()
+    if not peer:
+        raise HTTPException(status_code=404)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    new_name = str(payload.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="name is required")
+    _ensure_unique_peer_name(db, new_name, exclude_id=peer.id)
+    peer.name = new_name
+    db.commit()
+    _apply_peers(db, controller)
+    return {"ok": True, "peer": peer_basic_row(peer)}
+
+
+@router.post("/api/v1/peers/{peer_id}/expires")
+async def api_v1_set_peer_expires(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    controller = awg()
+    peer = db.query(Peer).filter_by(id=peer_id).first()
+    if not peer:
+        raise HTTPException(status_code=404)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    new_expires_at = parse_expires_from_api(payload)
+    if should_reactivate_peer(peer.expires_at, new_expires_at):
+        peer.enabled = True
+    peer.expires_at = new_expires_at
+    db.commit()
+    _apply_peers(db, controller)
+    return {"ok": True, "peer": peer_basic_row(peer)}
+
+
+@router.post("/api/v1/peers/{peer_id}/status")
+async def api_v1_set_peer_status(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    controller = awg()
+    peer = db.query(Peer).filter_by(id=peer_id).first()
+    if not peer:
+        raise HTTPException(status_code=404)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    if "enabled" not in payload:
+        raise HTTPException(status_code=400, detail="enabled is required")
+    peer.enabled = parse_bool(payload.get("enabled"))
+    db.commit()
+    _apply_peers(db, controller)
+    return {"ok": True, "peer": peer_basic_row(peer)}
+
+
 @router.post("/api/v1/peers/{peer_id}/toggle")
 def api_v1_toggle_peer(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
     controller = awg()
@@ -177,6 +245,11 @@ def api_v1_delete_peer(request: Request, peer_id: str, db=Depends(get_db), _=Dep
     interface_lines, _, _ = read_interface_config(controller)
     apply_config_from_db(db, controller, interface_lines, allow_fail=True)
     return {"ok": True}
+
+
+@router.post("/api/v1/peers/{peer_id}/delete")
+def api_v1_delete_peer_post(request: Request, peer_id: str, db=Depends(get_db), _=Depends(require_api_key)):
+    return api_v1_delete_peer(request, peer_id, db, _)
 
 
 @router.get("/api/v1/peers/{peer_id}/config")
