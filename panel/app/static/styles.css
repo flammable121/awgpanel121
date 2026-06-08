@@ -245,6 +245,12 @@ textarea {
   color: var(--ink);
 }
 
+input[readonly] {
+  color: var(--muted);
+  background: rgba(12, 17, 24, 0.45);
+  cursor: default;
+}
+
 textarea {
   min-height: 82px;
   resize: vertical;
