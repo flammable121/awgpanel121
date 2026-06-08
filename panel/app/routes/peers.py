@@ -31,6 +31,27 @@ from ..services.awg_service import (
 router = APIRouter()
 
 
+def _normalize_peer_name(name: str) -> str:
+    return str(name or "").strip().casefold()
+
+
+def _peer_name_exists(db, name: str, exclude_id: str | None = None) -> bool:
+    normalized = _normalize_peer_name(name)
+    if not normalized:
+        return False
+    for peer in db.query(Peer).all():
+        if exclude_id and peer.id == exclude_id:
+            continue
+        if _normalize_peer_name(peer.name) == normalized:
+            return True
+    return False
+
+
+def _ensure_unique_peer_name(db, name: str, exclude_id: str | None = None) -> None:
+    if _peer_name_exists(db, name, exclude_id):
+        raise HTTPException(status_code=409, detail="Конфигурация с таким именем уже существует")
+
+
 @router.get("/api/peers")
 def api_peers(request: Request, db=Depends(get_db)):
     require_login(request)
@@ -63,6 +84,7 @@ async def api_v1_create_peer(request: Request, db=Depends(get_db), _=Depends(req
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     name = str(payload.get("name") or "").strip()
+    _ensure_unique_peer_name(db, name)
     expires_at = parse_expires_from_api(payload)
     try:
         peer = build_new_peer(name, controller, db, expires_at, allow_apply_fail=True)
@@ -102,7 +124,9 @@ async def api_v1_update_peer(request: Request, peer_id: str, db=Depends(get_db),
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     if "name" in payload:
-        peer.name = str(payload.get("name") or "").strip() or peer.name
+        new_name = str(payload.get("name") or "").strip() or peer.name
+        _ensure_unique_peer_name(db, new_name, exclude_id=peer.id)
+        peer.name = new_name
     if "note" in payload:
         note = str(payload.get("note") or "").strip()
         peer.note = note or None
@@ -233,6 +257,7 @@ def create_peer(
 ):
     require_login(request)
     controller = awg()
+    _ensure_unique_peer_name(db, name)
     try:
         peer = build_new_peer(
             name,
@@ -291,7 +316,9 @@ def edit_peer_action(
     if not peer:
         raise HTTPException(status_code=404)
 
-    peer.name = name.strip() or peer.name
+    new_name = name.strip() or peer.name
+    _ensure_unique_peer_name(db, new_name, exclude_id=peer.id)
+    peer.name = new_name
     peer.note = note.strip() or None
     new_expires_at = parse_expires_from_form(expires_date, expires_time, never_expires, tz_offset)
     if should_reactivate_peer(peer.expires_at, new_expires_at):
